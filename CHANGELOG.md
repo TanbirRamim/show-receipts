@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-08)
 
 - First version: Stop hook for Claude Code and Codex that blocks unproven "tests pass", "build succeeds" and "lint is clean" claims.
 - `check` and `replay` commands to try it on your own transcripts.
