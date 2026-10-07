@@ -1,0 +1,19 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
+  "name": "show-receipts",
+  "description": "Make your coding agent prove \"tests pass\" before it says it.",
+  "owner": {
+    "name": "Tanbir Hossain Ramim",
+    "url": "https://github.com/TanbirRamim"
+  },
+  "plugins": [
+    {
+      "name": "show-receipts",
+      "source": "./",
+      "description": "Stop hook that blocks unproven \"tests pass\", \"build succeeds\" and \"lint is clean\" claims.",
+      "category": "development",
+      "version": "0.1.0",
+      "homepage": "https://github.com/TanbirRamim/show-receipts"
+    }
+  ]
+}

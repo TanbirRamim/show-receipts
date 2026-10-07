@@ -1,0 +1,18 @@
+name: It let an unproven claim through
+description: The agent said tests pass without running them and show-receipts allowed it
+labels: ["missed claim"]
+body:
+  - type: textarea
+    id: message
+    attributes:
+      label: The agent's final message
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What actually ran (or didn't)
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version

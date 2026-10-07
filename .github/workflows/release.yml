@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m unittest discover tests
+      - name: Version in the tag matches the code
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "__version__ = \"$v\"" hooks/show_receipts.py
+          grep -q "\"version\": \"$v\"" .claude-plugin/plugin.json
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag

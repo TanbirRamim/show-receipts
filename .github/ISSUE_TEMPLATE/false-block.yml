@@ -1,0 +1,21 @@
+name: It blocked when it shouldn't have
+description: The agent did run the check, but show-receipts still blocked
+labels: ["false positive"]
+body:
+  - type: textarea
+    id: message
+    attributes:
+      label: The agent's final message (or the sentence that got flagged)
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: The commands that ran after the last edit, and their exit codes
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version
+      placeholder: Claude Code 2.1.x, Codex 0.160

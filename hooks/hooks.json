@@ -1,0 +1,16 @@
+{
+  "description": "show-receipts: block unproven \"tests pass\" claims",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/show_receipts.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
