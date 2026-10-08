@@ -269,6 +269,7 @@ _LINT_TOOLS = {
     "staticcheck",
     "ktlint",
     "swiftlint",
+    "credo",
 }
 _ALL_WORDS = re.compile(r"^(?:ci|check|checks|verify|validate|all|precommit|pre-commit)(?::.*)?$", re.I)
 _TEST_WORD = re.compile(r"(?:^|[/_.:-])(?:tests?|specs?|e2e)(?:$|[/_.:-])", re.I)
@@ -309,7 +310,9 @@ def _segment_categories(toks: list[str]) -> set:
     args = [t for t in toks[1:] if not t.startswith("-")]
     flags = [t for t in toks[1:] if t.startswith("-")]
 
-    if _INTERPRETERS.match(head):
+    # bun/deno are interpreters, but "bun run build" or "deno task test" are runner calls.
+    js_runner = head in ("bun", "deno") and bool(args) and args[0] in ("run", "task", "lint", "check", "fmt", "test")
+    if _INTERPRETERS.match(head) and not js_runner:
         if "-m" in toks[1:3] and len(toks) > toks.index("-m") + 1:
             mod = toks[toks.index("-m") + 1].lower()
             if mod in ("build", "compileall"):
@@ -318,6 +321,8 @@ def _segment_categories(toks: list[str]) -> set:
         if "--test" in flags or (args and args[0] == "test"):
             cats.add("tests")
         if args and _TEST_WORD.search(os.path.basename(args[0])):
+            cats.add("tests")
+        if head == "php" and args[:2] == ["artisan", "test"]:
             cats.add("tests")
         if args and re.search(r"manage\.py$", args[0]) and len(args) > 1 and args[1] == "test":
             cats.add("tests")
@@ -342,7 +347,12 @@ def _segment_categories(toks: list[str]) -> set:
         cats.add("lint")
 
     if head in _RUNNERS or head.endswith("gradlew") or head.endswith("mvnw"):
-        sub = [a.lower() for a in args[:3] if a not in ("run", "run-script", "exec", "x", "-C")]
+        if head == "yarn" and args[:1] == ["workspace"]:
+            args = args[2:]  # yarn workspace <name> <script>
+        skip = ("run", "run-script", "exec", "x", "-C", "task", "workspaces", "foreach")
+        sub = [a.lower() for a in args if a not in skip][:2]
+        if head == "deno" and sub[:1] == ["check"]:
+            cats.add("lint")
         if head in ("make", "gmake") and not sub:
             cats.add("build")
         for a in sub[:2]:
@@ -352,7 +362,7 @@ def _segment_categories(toks: list[str]) -> set:
                 cats.add("build")
             if _LINT_WORD.match(a) or a in _LINT_TOOLS:
                 cats.add("lint")
-            if _ALL_WORDS.match(a) and not (head == "cargo" and a == "check"):
+            if _ALL_WORDS.match(a) and not (head in ("cargo", "deno") and a == "check"):
                 cats.update(CATEGORIES)
         if head in ("mvn", "mvnw", "./mvnw") and "verify" in sub:
             cats.update(CATEGORIES)

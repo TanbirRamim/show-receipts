@@ -86,13 +86,13 @@ python3 hooks/show_receipts.py replay ~/.claude/projects/*/*.jsonl
 
 ## Other ways to install
 
-**Claude Code, one project only.** Copy the hook into the repo and add it to `.claude/settings.json`:
+**Claude Code, one project only.** Run this in the repo root:
 
 ```sh
-mkdir -p .claude/hooks && curl -fsSL https://raw.githubusercontent.com/TanbirRamim/show-receipts/main/hooks/show_receipts.py -o .claude/hooks/show_receipts.py
+curl -fsSL https://raw.githubusercontent.com/TanbirRamim/show-receipts/main/install.sh | sh
 ```
 
-then merge [examples/claude-settings.json](examples/claude-settings.json) into `.claude/settings.json`.
+It copies the hook to `.claude/hooks/` and adds it to `.claude/settings.json` without touching your other settings (the old file is backed up first). Add `-s -- --global` after `sh` to install for every project in `~/.claude` instead. Rather do it by hand? Copy `hooks/show_receipts.py` to `.claude/hooks/` and merge [examples/claude-settings.json](examples/claude-settings.json).
 
 **Codex.** Put the script somewhere stable and register it as a Stop hook in `~/.codex/hooks.json` (or a trusted project's `.codex/hooks.json`):
 
