@@ -81,7 +81,8 @@ _HEDGE_RE = re.compile(
     re.I,
 )
 # Phrases that contain a hedge word but are still clean results.
-_HEDGE_SAFE_RE = re.compile(r"\b(?:0|zero|no)\s+(?:test\s+)?(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b"
+_HEDGE_SAFE_RE = re.compile(
+    r"\b(?:0|zero|no)\s+(?:test\s+)?(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b"
     rf"|\b{_LINT_TOOL_NAMES}\s+reports?\s+(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
     re.I,
 )
