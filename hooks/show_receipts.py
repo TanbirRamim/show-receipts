@@ -32,23 +32,37 @@ CATEGORIES = ("tests", "build", "lint")
 # Claims: what the agent says at the end of its turn
 # --------------------------------------------------------------------------
 
-_OK = r"(?:pass(?:es|ed|ing)?|succeed(?:s|ed)?|green|work(?:s|ing)?)"
+_OK = r"(?:pass(?:es|ed|ing)?|succeed(?:s|ed)?|green|work(?:s|ing)?|happy)"
 _FILL = r"(?:\s+(?:are|is|now|still|all|both|also|fully|again|locally|cleanly|successfully))*"
+# The sentence ends here, or only "now"/"again"/"locally" follows. Keeps
+# "everything passes" from matching "everything passes through the proxy".
+_END = r"(?=\s*(?:[.!,;:)]|$|\s+(?:now|again|locally)\b))"
+_TEST_TOOL_NAMES = r"(?:pytest|jest|vitest|mocha|rspec|phpunit|cargo\s+test|go\s+test|npm\s+test|nextest)"
+_LINT_TOOL_NAMES = r"(?:lint(?:er)?|tsc|clippy|ruff|eslint|mypy|pyright|biome|golangci-lint|shellcheck)"
 
 CLAIM_PATTERNS: dict[str, list[str]] = {
     "tests": [
-        rf"\b(?:the\s+)?(?:new\s+|existing\s+|unit\s+|integration\s+|e2e\s+)?tests?{_FILL}\s+{_OK}\b",
-        rf"\btest\s+suite{_FILL}\s+{_OK}\b",
+        rf"\b(?:the\s+)?(?:new\s+|existing\s+|unit\s+|integration\s+|e2e\s+)?(?:tests?|specs?){_FILL}\s+{_OK}\b",
+        rf"\b(?:whole\s+|full\s+|entire\s+)?(?:test\s+|spec\s+)?suite{_FILL}\s+{_OK}\b",
+        rf"\b{_TEST_TOOL_NAMES}{_FILL}\s+{_OK}\b",
         r"\b\d+\s+(?:tests?\s+)?passed\b",
         r"\b\d+\s*/\s*\d+\s+tests?\s+pass",
+        rf"\btests\b.*\bthey{_FILL}\s+{_OK}\b",
+        r"\b(?:no|zero|0)\s+test\s+failures\b",
+        rf"^(?:it'?s\s+)?all\s+green{_END}",
+        rf"\beverything{_FILL}\s+(?:pass(?:es|ing)?|green){_END}",
+        r"\bverified\s+(?:that\s+)?(?:the\s+)?(?:fix|change|patch)\s+works\b",
+        r"\bverified\s+(?:it|the\s+(?:fix|change|patch))\s+with\s+(?:the\s+)?tests\b",
     ],
     "build": [
-        rf"\bbuild(?:s)?{_FILL}\s+(?:{_OK}|fine|cleanly|successfully)\b",
+        rf"\bbuild(?:s)?{_FILL}\s+(?:{_OK}|fine|cleanly|successfully|without\s+(?:errors|warnings))\b",
         r"\bcompiles\s+(?:cleanly|successfully|fine|without\s+(?:errors|warnings))\b",
+        rf"\b(?:it|code|project|crate|everything)\s+(?:now\s+)?compiles{_END}",
     ],
     "lint": [
-        rf"\b(?:lint(?:er|ing)?|type[\s-]?checks?|typecheck(?:ing)?|clippy|ruff|eslint|mypy|pyright){_FILL}\s+(?:{_OK}|clean)\b",
-        r"\bno\s+(?:lint|type)\s+errors\b",
+        rf"\b(?:lint(?:er|ing)?|type[\s-]?checks?|typecheck(?:ing)?|clippy|ruff|eslint|mypy|pyright){_FILL}\s+(?:{_OK}|clean|cleanly|fine)\b",
+        r"\b(?:no|0|zero)\s+(?:lint|type|clippy|eslint|mypy|tsc)\s+(?:errors|warnings|issues|problems)\b",
+        rf"\b{_LINT_TOOL_NAMES}\s+(?:reports?\s+|shows?\s+|finds\s+)?(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
     ],
 }
 _CLAIM_RE = {k: [re.compile(p, re.I) for p in v] for k, v in CLAIM_PATTERNS.items()}
@@ -56,18 +70,21 @@ _CLAIM_RE = {k: [re.compile(p, re.I) for p in v] for k, v in CLAIM_PATTERNS.item
 # A sentence with any of these is not a confident claim about this session,
 # so we leave it alone. False positives are worse than misses.
 _HEDGE_RE = re.compile(
-    r"\b(?:not|never|cannot|can't|couldn't|didn't|don't|doesn't|won't|isn't|aren't|wasn't|weren't|"
+    r"\b(?:not|never|cannot|can't|couldn't|didn't|don't|doesn't|won't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|"
     r"unable|fail(?:s|ed|ing|ure|ures)?|broken|skip(?:ped)?|"
     r"should|would|could|might|may|will|if|once|until|unless|whether|"
     r"expect(?:ed|s)?|assum\w*|hopefully|probably|likely|seems?|"
-    r"make\s+sure|verify|confirm|ensure|"
+    r"make\s+sure|verify|confirm|ensure|(?:make|get|keep|turn)\s+(?:the|it|them|everything|all)|"
     r"you|your|ci|pipeline|actions|"
     r"previously|earlier|before|were|was|used\s+to|"
     r"reports?|reported|says?|said|claims?|claimed|according)\b",
     re.I,
 )
 # Phrases that contain a hedge word but are still clean results.
-_HEDGE_SAFE_RE = re.compile(r"\b(?:0|zero|no)\s+(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b", re.I)
+_HEDGE_SAFE_RE = re.compile(r"\b(?:0|zero|no)\s+(?:test\s+)?(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b"
+    rf"|\b{_LINT_TOOL_NAMES}\s+reports?\s+(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
+    re.I,
+)
 _FENCE_RE = re.compile(r"```.*?(?:```|\Z)", re.S)
 
 
