@@ -289,9 +289,18 @@ class CommandTests(unittest.TestCase):
             "cucumber-js",
             "dune test",
             "elm-test",
+            "dune runtest",
+            "opam exec -- dune test",
+            "uv run -- pytest",
+            "npx -- jest",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertIn("tests", self.cats(cmd))
+
+    def test_scaffolding_is_not_a_test_run(self):
+        for cmd in ["elm-test init", "elm-test install elm/json"]:
+            with self.subTest(cmd=cmd):
+                self.assertNotIn("tests", self.cats(cmd))
 
     def test_more_runners(self):
         tests = [

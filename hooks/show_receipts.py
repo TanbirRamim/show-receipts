@@ -139,6 +139,7 @@ _WRAPPERS = {
 }
 _RUN_WRAPPERS = {  # "<tool> run|exec <cmd>"
     "uv",
+    "opam",
     "poetry",
     "pipenv",
     "pdm",
@@ -311,7 +312,7 @@ def _tokens(segment: str) -> list[str]:
     i = 0
     while i < len(toks):
         t = toks[i]
-        if not out and (_ENV_ASSIGN.match(t) or t in _WRAPPERS or t in ("(", "{")):
+        if not out and (_ENV_ASSIGN.match(t) or t in _WRAPPERS or t in ("(", "{", "--")):
             i += 1
             continue
         if not out and t == "timeout" and i + 1 < len(toks):
@@ -353,7 +354,7 @@ def _segment_categories(toks: list[str]) -> set:
             cats.update(CATEGORIES)
         return cats
 
-    if head in _TEST_TOOLS:
+    if head in _TEST_TOOLS and not (head == "elm-test" and args[:1] in (["init"], ["install"])):
         cats.add("tests")
     if head in _BUILD_TOOLS:
         if head == "tsc":
@@ -389,6 +390,8 @@ def _segment_categories(toks: list[str]) -> set:
                 cats.update(CATEGORIES)
         if head in ("mvn", "mvnw", "./mvnw") and "verify" in sub:
             cats.update(CATEGORIES)
+        if head == "dune" and sub[:1] == ["runtest"]:
+            cats.update(("tests", "build"))
         if head in ("go",) and sub[:1] == ["vet"]:
             cats.add("lint")
         if head in ("xcodebuild",):
