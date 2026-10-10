@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-10)
 
 - Catches more ways of saying it passed: "all green", "everything passes", "the suite is green", "pytest is happy", "type-checks fine", "tsc reports no errors", "no clippy warnings", "it compiles now", "verified the fix works". Hedged lines like "haven't verified" or "make the suite green" still pass through.
 - More runners count as receipts: `bun run test`, `deno task test`, `deno lint`/`check`/`fmt --check`, `yarn workspace <name> test`, `yarn workspaces foreach run test`, `php artisan test`, `mix credo`. Most others (pnpm, nx, turbo, uv, poetry, tox, nox, gradle, mvn, swift, zig, phpunit, pest, mix) already worked and now have tests.

@@ -1,6 +1,6 @@
 [project]
 name = "show-receipts"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Stop hook that makes coding agents prove \"tests pass\" before they say it."
 readme = "README.md"
 license = "MIT"
