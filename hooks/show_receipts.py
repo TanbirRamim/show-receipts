@@ -200,6 +200,7 @@ _RUNNERS = {
     "elixir",
     "rails",
     "bin/rails",
+    "dune",
 }
 _TEST_TOOLS = {
     "pytest",
@@ -228,6 +229,10 @@ _TEST_TOOLS = {
     "testem",
     "jasmine",
     "uvu",
+    "gotestsum",
+    "behave",
+    "cucumber-js",
+    "elm-test",
 }
 _BUILD_TOOLS = {
     "tsc",

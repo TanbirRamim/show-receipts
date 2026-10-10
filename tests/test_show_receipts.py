@@ -284,6 +284,11 @@ class CommandTests(unittest.TestCase):
             "swift test",
             "mix test",
             "tox -e py312",
+            "gotestsum -- ./...",
+            "behave",
+            "cucumber-js",
+            "dune test",
+            "elm-test",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertIn("tests", self.cats(cmd))
@@ -319,6 +324,11 @@ class CommandTests(unittest.TestCase):
             "php artisan test",
             "composer test",
             "mix test",
+            "gotestsum -- ./...",
+            "behave",
+            "cucumber-js",
+            "dune test",
+            "elm-test",
         ]
         for cmd in tests:
             with self.subTest(cmd=cmd):
