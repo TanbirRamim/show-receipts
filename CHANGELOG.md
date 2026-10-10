@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Counts gotestsum, behave, cucumber-js, elm-test and dune test/runtest as test runs (@jay23606). `elm-test init` no longer counts. `uv run -- pytest`, `npx -- jest` and `opam exec -- dune test` now work too.
+
 ## 0.2.0 (2026-10-10)
 
 - Catches more ways of saying it passed: "all green", "everything passes", "the suite is green", "pytest is happy", "type-checks fine", "tsc reports no errors", "no clippy warnings", "it compiles now", "verified the fix works". Hedged lines like "haven't verified" or "make the suite green" still pass through.

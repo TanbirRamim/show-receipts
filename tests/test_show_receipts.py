@@ -284,9 +284,23 @@ class CommandTests(unittest.TestCase):
             "swift test",
             "mix test",
             "tox -e py312",
+            "gotestsum -- ./...",
+            "behave",
+            "cucumber-js",
+            "dune test",
+            "elm-test",
+            "dune runtest",
+            "opam exec -- dune test",
+            "uv run -- pytest",
+            "npx -- jest",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertIn("tests", self.cats(cmd))
+
+    def test_scaffolding_is_not_a_test_run(self):
+        for cmd in ["elm-test init", "elm-test install elm/json"]:
+            with self.subTest(cmd=cmd):
+                self.assertNotIn("tests", self.cats(cmd))
 
     def test_more_runners(self):
         tests = [
@@ -319,6 +333,11 @@ class CommandTests(unittest.TestCase):
             "php artisan test",
             "composer test",
             "mix test",
+            "gotestsum -- ./...",
+            "behave",
+            "cucumber-js",
+            "dune test",
+            "elm-test",
         ]
         for cmd in tests:
             with self.subTest(cmd=cmd):
