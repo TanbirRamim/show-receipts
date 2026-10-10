@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -159,6 +160,92 @@ class ClaimTests(unittest.TestCase):
     def test_code_blocks_and_quotes_are_ignored(self):
         self.assertEqual(sr.find_claims("```\n12 passed\n```\n> all tests pass"), {})
 
+    def test_other_ways_of_saying_it_passes(self):
+        for text, cat in [
+            ("All green.", "tests"),
+            ("Everything passes.", "tests"),
+            ("Everything is green now.", "tests"),
+            ("The suite is green.", "tests"),
+            ("Suite passes.", "tests"),
+            ("pytest is happy.", "tests"),
+            ("pytest passes.", "tests"),
+            ("jest passes.", "tests"),
+            ("cargo test passes.", "tests"),
+            ("go test is green.", "tests"),
+            ("All specs pass.", "tests"),
+            ("The spec suite passes.", "tests"),
+            ("No test failures.", "tests"),
+            ("All 37 tests passing.", "tests"),
+            ("Verified the fix works.", "tests"),
+            ("I verified the fix with the tests.", "tests"),
+            ("Tests pass locally.", "tests"),
+            ("The whole suite passes.", "tests"),
+            ("Full test suite is green.", "tests"),
+            ("Ran the tests and they all pass.", "tests"),
+            ("Tests are all passing.", "tests"),
+            ("Compiles cleanly.", "build"),
+            ("It compiles now.", "build"),
+            ("Builds cleanly.", "build"),
+            ("The project builds without errors.", "build"),
+            ("Build is green.", "build"),
+            ("cargo build succeeds.", "build"),
+            ("Compiles without warnings.", "build"),
+            ("Type-checks fine.", "lint"),
+            ("Typechecks cleanly.", "lint"),
+            ("No lint errors.", "lint"),
+            ("tsc reports no errors.", "lint"),
+            ("No type errors.", "lint"),
+            ("Lint passes.", "lint"),
+            ("Linter is happy.", "lint"),
+            ("ruff is clean.", "lint"),
+            ("clippy is happy.", "lint"),
+            ("No lint warnings.", "lint"),
+            ("eslint reports 0 problems.", "lint"),
+            ("mypy is clean.", "lint"),
+            ("Zero lint errors.", "lint"),
+            ("No clippy warnings.", "lint"),
+        ]:
+            with self.subTest(text=text):
+                self.assertIn(cat, sr.find_claims(text))
+
+    def test_lookalikes_that_are_not_claims(self):
+        for text in [
+            "CI should pass now.",
+            "Run the tests to confirm.",
+            "Tests should be added.",
+            "I didn't run the tests.",
+            'You said "all green" earlier.',
+            "```\nall green\n```",
+            "> everything passes",
+            "Everything is done.",
+            "All green lights on the design.",
+            "The green button now works.",
+            "Everything works as intended?",
+            "Let me know if everything passes.",
+            "Next step: make the suite green.",
+            "I haven't verified the fix works.",
+            "Please verify the fix works.",
+            "pytest isn't happy yet.",
+            "Once it compiles, we can ship.",
+            "Type-checking might complain.",
+            "No tests exist for this module.",
+            "Need to add lint config.",
+            "The suite was green before this change.",
+            "It will compile after the rename.",
+            "Everything passes through the middleware.",
+            "Requests pass through the proxy.",
+            "All green tickets are closed.",
+            "The tests cover no errors path.",
+            "No errors in the logs, but I didn't run the tests.",
+            "Tests need to be written.",
+            "To check, run npm test.",
+            "The fix works around the bug.",
+            "Everything is wired up.",
+            "The user said tests pass.",
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(sr.find_claims(text), {})
+
 
 # --------------------------------------------------------------------------
 # commands
@@ -200,6 +287,60 @@ class CommandTests(unittest.TestCase):
         ]:
             with self.subTest(cmd=cmd):
                 self.assertIn("tests", self.cats(cmd))
+
+    def test_more_runners(self):
+        tests = [
+            "bun test",
+            "bun run test",
+            "deno test -A",
+            "deno task test",
+            "pnpm test",
+            "pnpm -r test",
+            "yarn test",
+            "yarn workspace api test",
+            "yarn workspaces foreach -A run test",
+            "nx test api",
+            "nx run api:test",
+            "nx affected -t test",
+            "npx nx test api",
+            "turbo test",
+            "turbo run test --filter=api",
+            "uv run pytest -q",
+            "poetry run pytest",
+            "tox",
+            "nox -s tests",
+            "gradle test",
+            "mvn test",
+            "swift test",
+            "zig build test",
+            "phpunit",
+            "vendor/bin/phpunit tests",
+            "./vendor/bin/pest",
+            "php artisan test",
+            "composer test",
+            "mix test",
+        ]
+        for cmd in tests:
+            with self.subTest(cmd=cmd):
+                self.assertIn("tests", self.cats(cmd))
+        other = {
+            "bun run build": {"build"},
+            "deno lint": {"lint"},
+            "deno check main.ts": {"lint"},
+            "deno fmt --check": {"lint"},
+            "mix credo": {"lint"},
+            "swift build": {"build"},
+            "zig build": {"build"},
+            "nx build web": {"build"},
+            "turbo lint": {"lint"},
+            "yarn workspace api build": {"build"},
+        }
+        for cmd, want in other.items():
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.cats(cmd), want)
+        for cmd in ["bun script.ts", "deno run main.ts", "bun run dev", "php artisan serve", "mix deps.get"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.cats(cmd), set())
 
     def test_build_and_lint(self):
         self.assertIn("build", self.cats("npm run build"))
@@ -544,3 +685,69 @@ class HookTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("sh") and os.name != "nt", "needs a POSIX shell")
+class InstallScriptTests(unittest.TestCase):
+    def run_install(self, cwd, *args):
+        env = dict(os.environ, SHOW_RECEIPTS_SRC=str(HOOK))
+        return subprocess.run(["sh", str(ROOT / "install.sh"), *args], cwd=cwd, env=env, capture_output=True, text=True)
+
+    def settings(self, d):
+        return json.loads((Path(d) / ".claude" / "settings.json").read_text())
+
+    def test_fresh_install_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = self.run_install(d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue((Path(d) / ".claude" / "hooks" / "show_receipts.py").exists())
+            first = self.settings(d)
+            self.assertEqual(len(first["hooks"]["Stop"]), 1)
+            r = self.run_install(d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(self.settings(d), first)
+            self.assertEqual(list((Path(d) / ".claude").glob("settings.json.bak-*")), [])
+
+    def test_merges_without_clobbering_and_backs_up(self):
+        with tempfile.TemporaryDirectory() as d:
+            claude = Path(d) / ".claude"
+            claude.mkdir()
+            old = {
+                "permissions": {"allow": ["Bash(ls)"]},
+                "hooks": {
+                    "Stop": [{"hooks": [{"type": "command", "command": "echo bye"}]}],
+                    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "x"}]}],
+                },
+            }
+            (claude / "settings.json").write_text(json.dumps(old))
+            r = self.run_install(d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            new = self.settings(d)
+            self.assertEqual(new["permissions"], old["permissions"])
+            self.assertEqual(new["hooks"]["PreToolUse"], old["hooks"]["PreToolUse"])
+            self.assertEqual(new["hooks"]["Stop"][0], old["hooks"]["Stop"][0])
+            self.assertIn("show_receipts.py", new["hooks"]["Stop"][1]["hooks"][0]["command"])
+            backups = list(claude.glob("settings.json.bak-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(json.loads(backups[0].read_text()), old)
+
+    def test_broken_settings_are_left_alone(self):
+        with tempfile.TemporaryDirectory() as d:
+            claude = Path(d) / ".claude"
+            claude.mkdir()
+            (claude / "settings.json").write_text("{ not json")
+            r = self.run_install(d)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertEqual((claude / "settings.json").read_text(), "{ not json")
+
+    def test_global_uses_config_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            env_dir = Path(d) / "cfg"
+            env = dict(os.environ, SHOW_RECEIPTS_SRC=str(HOOK), CLAUDE_CONFIG_DIR=str(env_dir))
+            r = subprocess.run(
+                ["sh", str(ROOT / "install.sh"), "--global"], cwd=d, env=env, capture_output=True, text=True
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue((env_dir / "hooks" / "show_receipts.py").exists())
+            cmd = json.loads((env_dir / "settings.json").read_text())["hooks"]["Stop"][0]["hooks"][0]["command"]
+            self.assertIn(str(env_dir), cmd)

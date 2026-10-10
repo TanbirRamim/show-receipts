@@ -32,23 +32,37 @@ CATEGORIES = ("tests", "build", "lint")
 # Claims: what the agent says at the end of its turn
 # --------------------------------------------------------------------------
 
-_OK = r"(?:pass(?:es|ed|ing)?|succeed(?:s|ed)?|green|work(?:s|ing)?)"
+_OK = r"(?:pass(?:es|ed|ing)?|succeed(?:s|ed)?|green|work(?:s|ing)?|happy)"
 _FILL = r"(?:\s+(?:are|is|now|still|all|both|also|fully|again|locally|cleanly|successfully))*"
+# The sentence ends here, or only "now"/"again"/"locally" follows. Keeps
+# "everything passes" from matching "everything passes through the proxy".
+_END = r"(?=\s*(?:[.!,;:)]|$|\s+(?:now|again|locally)\b))"
+_TEST_TOOL_NAMES = r"(?:pytest|jest|vitest|mocha|rspec|phpunit|cargo\s+test|go\s+test|npm\s+test|nextest)"
+_LINT_TOOL_NAMES = r"(?:lint(?:er)?|tsc|clippy|ruff|eslint|mypy|pyright|biome|golangci-lint|shellcheck)"
 
 CLAIM_PATTERNS: dict[str, list[str]] = {
     "tests": [
-        rf"\b(?:the\s+)?(?:new\s+|existing\s+|unit\s+|integration\s+|e2e\s+)?tests?{_FILL}\s+{_OK}\b",
-        rf"\btest\s+suite{_FILL}\s+{_OK}\b",
+        rf"\b(?:the\s+)?(?:new\s+|existing\s+|unit\s+|integration\s+|e2e\s+)?(?:tests?|specs?){_FILL}\s+{_OK}\b",
+        rf"\b(?:whole\s+|full\s+|entire\s+)?(?:test\s+|spec\s+)?suite{_FILL}\s+{_OK}\b",
+        rf"\b{_TEST_TOOL_NAMES}{_FILL}\s+{_OK}\b",
         r"\b\d+\s+(?:tests?\s+)?passed\b",
         r"\b\d+\s*/\s*\d+\s+tests?\s+pass",
+        rf"\btests\b.*\bthey{_FILL}\s+{_OK}\b",
+        r"\b(?:no|zero|0)\s+test\s+failures\b",
+        rf"^(?:it'?s\s+)?all\s+green{_END}",
+        rf"\beverything{_FILL}\s+(?:pass(?:es|ing)?|green){_END}",
+        r"\bverified\s+(?:that\s+)?(?:the\s+)?(?:fix|change|patch)\s+works\b",
+        r"\bverified\s+(?:it|the\s+(?:fix|change|patch))\s+with\s+(?:the\s+)?tests\b",
     ],
     "build": [
-        rf"\bbuild(?:s)?{_FILL}\s+(?:{_OK}|fine|cleanly|successfully)\b",
+        rf"\bbuild(?:s)?{_FILL}\s+(?:{_OK}|fine|cleanly|successfully|without\s+(?:errors|warnings))\b",
         r"\bcompiles\s+(?:cleanly|successfully|fine|without\s+(?:errors|warnings))\b",
+        rf"\b(?:it|code|project|crate|everything)\s+(?:now\s+)?compiles{_END}",
     ],
     "lint": [
-        rf"\b(?:lint(?:er|ing)?|type[\s-]?checks?|typecheck(?:ing)?|clippy|ruff|eslint|mypy|pyright){_FILL}\s+(?:{_OK}|clean)\b",
-        r"\bno\s+(?:lint|type)\s+errors\b",
+        rf"\b(?:lint(?:er|ing)?|type[\s-]?checks?|typecheck(?:ing)?|clippy|ruff|eslint|mypy|pyright){_FILL}\s+(?:{_OK}|clean|cleanly|fine)\b",
+        r"\b(?:no|0|zero)\s+(?:lint|type|clippy|eslint|mypy|tsc)\s+(?:errors|warnings|issues|problems)\b",
+        rf"\b{_LINT_TOOL_NAMES}\s+(?:reports?\s+|shows?\s+|finds\s+)?(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
     ],
 }
 _CLAIM_RE = {k: [re.compile(p, re.I) for p in v] for k, v in CLAIM_PATTERNS.items()}
@@ -56,18 +70,22 @@ _CLAIM_RE = {k: [re.compile(p, re.I) for p in v] for k, v in CLAIM_PATTERNS.item
 # A sentence with any of these is not a confident claim about this session,
 # so we leave it alone. False positives are worse than misses.
 _HEDGE_RE = re.compile(
-    r"\b(?:not|never|cannot|can't|couldn't|didn't|don't|doesn't|won't|isn't|aren't|wasn't|weren't|"
+    r"\b(?:not|never|cannot|can't|couldn't|didn't|don't|doesn't|won't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|"
     r"unable|fail(?:s|ed|ing|ure|ures)?|broken|skip(?:ped)?|"
     r"should|would|could|might|may|will|if|once|until|unless|whether|"
     r"expect(?:ed|s)?|assum\w*|hopefully|probably|likely|seems?|"
-    r"make\s+sure|verify|confirm|ensure|"
+    r"make\s+sure|verify|confirm|ensure|(?:make|get|keep|turn)\s+(?:the|it|them|everything|all)|"
     r"you|your|ci|pipeline|actions|"
     r"previously|earlier|before|were|was|used\s+to|"
     r"reports?|reported|says?|said|claims?|claimed|according)\b",
     re.I,
 )
 # Phrases that contain a hedge word but are still clean results.
-_HEDGE_SAFE_RE = re.compile(r"\b(?:0|zero|no)\s+(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b", re.I)
+_HEDGE_SAFE_RE = re.compile(
+    r"\b(?:0|zero|no)\s+(?:test\s+)?(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b"
+    rf"|\b{_LINT_TOOL_NAMES}\s+reports?\s+(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
+    re.I,
+)
 _FENCE_RE = re.compile(r"```.*?(?:```|\Z)", re.S)
 
 
@@ -269,6 +287,7 @@ _LINT_TOOLS = {
     "staticcheck",
     "ktlint",
     "swiftlint",
+    "credo",
 }
 _ALL_WORDS = re.compile(r"^(?:ci|check|checks|verify|validate|all|precommit|pre-commit)(?::.*)?$", re.I)
 _TEST_WORD = re.compile(r"(?:^|[/_.:-])(?:tests?|specs?|e2e)(?:$|[/_.:-])", re.I)
@@ -309,7 +328,9 @@ def _segment_categories(toks: list[str]) -> set:
     args = [t for t in toks[1:] if not t.startswith("-")]
     flags = [t for t in toks[1:] if t.startswith("-")]
 
-    if _INTERPRETERS.match(head):
+    # bun/deno are interpreters, but "bun run build" or "deno task test" are runner calls.
+    js_runner = head in ("bun", "deno") and bool(args) and args[0] in ("run", "task", "lint", "check", "fmt", "test")
+    if _INTERPRETERS.match(head) and not js_runner:
         if "-m" in toks[1:3] and len(toks) > toks.index("-m") + 1:
             mod = toks[toks.index("-m") + 1].lower()
             if mod in ("build", "compileall"):
@@ -318,6 +339,8 @@ def _segment_categories(toks: list[str]) -> set:
         if "--test" in flags or (args and args[0] == "test"):
             cats.add("tests")
         if args and _TEST_WORD.search(os.path.basename(args[0])):
+            cats.add("tests")
+        if head == "php" and args[:2] == ["artisan", "test"]:
             cats.add("tests")
         if args and re.search(r"manage\.py$", args[0]) and len(args) > 1 and args[1] == "test":
             cats.add("tests")
@@ -342,7 +365,12 @@ def _segment_categories(toks: list[str]) -> set:
         cats.add("lint")
 
     if head in _RUNNERS or head.endswith("gradlew") or head.endswith("mvnw"):
-        sub = [a.lower() for a in args[:3] if a not in ("run", "run-script", "exec", "x", "-C")]
+        if head == "yarn" and args[:1] == ["workspace"]:
+            args = args[2:]  # yarn workspace <name> <script>
+        skip = ("run", "run-script", "exec", "x", "-C", "task", "workspaces", "foreach")
+        sub = [a.lower() for a in args if a not in skip][:2]
+        if head == "deno" and sub[:1] == ["check"]:
+            cats.add("lint")
         if head in ("make", "gmake") and not sub:
             cats.add("build")
         for a in sub[:2]:
@@ -352,7 +380,7 @@ def _segment_categories(toks: list[str]) -> set:
                 cats.add("build")
             if _LINT_WORD.match(a) or a in _LINT_TOOLS:
                 cats.add("lint")
-            if _ALL_WORDS.match(a) and not (head == "cargo" and a == "check"):
+            if _ALL_WORDS.match(a) and not (head in ("cargo", "deno") and a == "check"):
                 cats.update(CATEGORIES)
         if head in ("mvn", "mvnw", "./mvnw") and "verify" in sub:
             cats.update(CATEGORIES)
