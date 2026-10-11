@@ -110,18 +110,21 @@ The plugin also ships a small skill that asks the agent to end with a receipts b
 
 ## Config
 
-Optional. Put `.show-receipts.json` in the project root:
+Optional. Your settings live in your own config, `~/.config/show-receipts/config.json` (or `$XDG_CONFIG_HOME/show-receipts/config.json`, or the path in `SHOW_RECEIPTS_CONFIG`):
 
 ```json
 {
   "claims": ["tests", "build", "lint"],
   "max_blocks": 1,
   "extra_commands": { "tests": ["^\\./acme verify"] },
-  "ignore_paths": ["/generated/"]
+  "ignore_paths": ["/generated/"],
+  "disabled_projects": ["~/work/legacy-app"]
 }
 ```
 
-`"enabled": false` turns it off for that project. `SHOW_RECEIPTS_DISABLE=1` turns it off everywhere. `SHOW_RECEIPTS_DEBUG=1` prints errors to stderr instead of silently allowing.
+`"enabled": false` turns it off everywhere, `disabled_projects` turns it off for those folders. `SHOW_RECEIPTS_DISABLE=1` also turns it off everywhere. `SHOW_RECEIPTS_DEBUG=1` prints errors to stderr instead of silently allowing.
+
+A repository can ship a `.show-receipts.json` too, but only its `ignore_paths` are read. A repo you just cloned can't switch the check off or decide which commands count as proof.
 
 Check one transcript by hand:
 

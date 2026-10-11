@@ -759,19 +759,56 @@ def _clip(s: str, n: int = 140) -> str:
 # --------------------------------------------------------------------------
 
 
-def load_config(cwd: str) -> dict:
+# A repository may only add ignore paths. Everything that can switch the check
+# off or change what counts as proof lives in the user's own config.
+PROJECT_KEYS = ("ignore_paths",)
+
+
+def user_config_path() -> Path:
+    if os.environ.get("SHOW_RECEIPTS_CONFIG"):
+        return Path(os.environ["SHOW_RECEIPTS_CONFIG"]).expanduser()
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "show-receipts" / "config.json"
+
+
+def _read_json(f: Path) -> dict:
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _project_config(cwd: str) -> tuple[dict, Path | None]:
     d = Path(cwd or ".").resolve()
     for parent in [d, *d.parents]:
         f = parent / CONFIG_NAME
         if f.is_file():
-            try:
-                data = json.loads(f.read_text(encoding="utf-8"))
-                return data if isinstance(data, dict) else {}
-            except (OSError, ValueError):
-                return {}
+            return _read_json(f), parent
         if (parent / ".git").exists():
-            break
-    return {}
+            return {}, parent
+    return {}, None
+
+
+def load_config(cwd: str) -> dict:
+    user = _read_json(user_config_path())
+    project, root = _project_config(cwd)
+    cfg = {k: v for k, v in user.items() if k != "disabled_projects"}
+    here = Path(cwd or ".").resolve()
+    for p in user.get("disabled_projects") or []:
+        try:
+            off = Path(str(p)).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        if here == off or off in here.parents or (root is not None and root == off):
+            cfg["enabled"] = False
+    ignore = list(user.get("ignore_paths") or [])
+    for key in PROJECT_KEYS:
+        if key == "ignore_paths":
+            ignore += [x for x in project.get(key) or [] if isinstance(x, str)]
+    if ignore:
+        cfg["ignore_paths"] = ignore
+    return cfg
 
 
 def _find_codex_transcript(session_id: str) -> Path | None:
