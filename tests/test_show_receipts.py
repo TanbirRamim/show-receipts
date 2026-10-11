@@ -618,7 +618,9 @@ class TranscriptFixtureTests(unittest.TestCase):
 class HookTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.env = dict(os.environ, TMPDIR=self.tmp.name)
+        self.env = dict(
+            os.environ, TMPDIR=self.tmp.name, SHOW_RECEIPTS_CONFIG=str(Path(self.tmp.name) / "no-user-config.json")
+        )
         self.env.pop("SHOW_RECEIPTS_DISABLE", None)
 
     def tearDown(self):
@@ -679,8 +681,37 @@ class HookTests(unittest.TestCase):
         del self.env["SHOW_RECEIPTS_DISABLE"]
         proj = Path(self.tmp.name) / "proj"
         proj.mkdir()
-        (proj / ".show-receipts.json").write_text('{"enabled": false}')
+        user_cfg = Path(self.tmp.name) / "user.json"
+        user_cfg.write_text(json.dumps({"disabled_projects": [str(proj)]}))
+        self.env["SHOW_RECEIPTS_CONFIG"] = str(user_cfg)
         self.assertIsNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
+
+    def test_repo_config_cannot_turn_the_check_off(self):
+        rows = [user("fix"), edit()]
+        proj = Path(self.tmp.name) / "proj"
+        proj.mkdir()
+        self.env["SHOW_RECEIPTS_CONFIG"] = str(Path(self.tmp.name) / "none.json")
+        (proj / ".show-receipts.json").write_text(
+            json.dumps({"enabled": False, "claims": [], "max_blocks": 0, "extra_commands": {"tests": ["^true"]}})
+        )
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
+
+    def test_repo_config_only_adds_ignore_paths(self):
+        proj = Path(self.tmp.name) / "proj"
+        proj.mkdir()
+        user_cfg = Path(self.tmp.name) / "user.json"
+        user_cfg.write_text(json.dumps({"ignore_paths": ["/a/"], "max_blocks": 2}))
+        (proj / ".show-receipts.json").write_text(json.dumps({"ignore_paths": ["/gen/"], "enabled": False}))
+        old = os.environ.get("SHOW_RECEIPTS_CONFIG")
+        os.environ["SHOW_RECEIPTS_CONFIG"] = str(user_cfg)
+        try:
+            cfg = sr.load_config(str(proj))
+        finally:
+            if old is None:
+                del os.environ["SHOW_RECEIPTS_CONFIG"]
+            else:
+                os.environ["SHOW_RECEIPTS_CONFIG"] = old
+        self.assertEqual(cfg, {"ignore_paths": ["/a/", "/gen/"], "max_blocks": 2})
 
     def test_codex_payload_without_transcript_path(self):
         home = Path(self.tmp.name) / "codex"

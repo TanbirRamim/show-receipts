@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings moved to your own config (`~/.config/show-receipts/config.json`). A repo's `.show-receipts.json` can now only add `ignore_paths`; it can no longer turn the check off, change the claims, `max_blocks` or `extra_commands`. Use `disabled_projects` in your config to turn it off for a folder. Thanks to @davepoon for pointing this out.
 - Counts gotestsum, behave, cucumber-js, elm-test and dune test/runtest as test runs (@jay23606). `elm-test init` no longer counts. `uv run -- pytest`, `npx -- jest` and `opam exec -- dune test` now work too.
 
 ## 0.2.0 (2026-10-10)

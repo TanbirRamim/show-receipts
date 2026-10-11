@@ -1,7 +1,3 @@
 {
-  "enabled": true,
-  "claims": ["tests", "build", "lint"],
-  "max_blocks": 1,
-  "extra_commands": { "tests": ["^\\./acme verify"] },
   "ignore_paths": ["/generated/"]
 }
