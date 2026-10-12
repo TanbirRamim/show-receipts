@@ -111,10 +111,10 @@ def write_jsonl(rows: list, directory: str) -> Path:
     return p
 
 
-def verdict(rows: list, message: str | None = None, config: dict | None = None) -> sr.Verdict:
+def verdict(rows: list, message: str | None = None, config: dict | None = None, cwd: str = "/repo") -> sr.Verdict:
     with tempfile.TemporaryDirectory() as d:
         tr = sr.parse_transcript(write_jsonl(rows, d))
-    return sr.evaluate(tr, message if message is not None else tr.last_assistant_text, config, "/repo")
+    return sr.evaluate(tr, message if message is not None else tr.last_assistant_text, config, cwd)
 
 
 # --------------------------------------------------------------------------
@@ -685,8 +685,9 @@ class HookTests(unittest.TestCase):
 
     def test_disable_env_and_config(self):
         rows = [user("fix"), edit()]
+        # The env switch is gone: a project's agent settings could set it.
         self.env["SHOW_RECEIPTS_DISABLE"] = "1"
-        self.assertIsNone(self.run_hook(rows, "Tests pass."))
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", session_id="env"))
         del self.env["SHOW_RECEIPTS_DISABLE"]
         proj = Path(self.tmp.name) / "proj"
         proj.mkdir()
@@ -739,6 +740,24 @@ class HookTests(unittest.TestCase):
         self.assertEqual([sr._project_ignore_dir(x) for x in bad], [None] * len(bad))
         self.assertEqual(sr._project_ignore_dir("/generated/"), "generated")
         self.assertEqual(sr._project_ignore_dir("web/dist"), "web/dist")
+
+    def test_repo_folders_match_from_the_project_root(self):
+        rows = [user("x"), edit("/Users/me/proj/a.py"), bash("pytest", True, "1 passed")]
+        rows += [edit("/Users/me/proj/src/a.py"), say("Tests pass.")]
+        for dirs in (["Users"], ["me"], ["proj"], ["a.py/x"]):
+            self.assertTrue(verdict(rows, config={"project_ignore_dirs": dirs}, cwd="/Users/me/proj").block, dirs)
+        self.assertFalse(verdict(rows, config={"project_ignore_dirs": ["src"]}, cwd="/Users/me/proj").block)
+
+    def test_home_pointing_into_the_project_is_ignored(self):
+        rows = [user("fix"), edit()]
+        proj = Path(self.tmp.name) / "proj"
+        (proj / ".git").mkdir(parents=True)
+        cfg = proj / ".config" / "show-receipts" / "config.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text('{"enabled": false}')
+        self.env["HOME"] = str(proj)
+        self.env.pop("XDG_CONFIG_HOME")
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
 
     def test_repo_cannot_ignore_every_edit(self):
         rows = [user("fix"), edit()]

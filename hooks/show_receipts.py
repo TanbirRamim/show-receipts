@@ -23,6 +23,11 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+try:
+    import pwd
+except ImportError:  # Windows
+    pwd = None
+
 __version__ = "0.3.2"
 
 CONFIG_NAME = ".show-receipts.json"
@@ -667,13 +672,25 @@ class Verdict:
     reason: str = ""
 
 
-def _counts_as_edit(path: str, cwd: str, ignore: list[str]) -> bool:
+def _project_relative(p: str, cwd: str) -> str:
+    if cwd and p.startswith("/"):
+        root = cwd.replace("\\", "/").rstrip("/") + "/"
+        return p[len(root) :] if p.startswith(root) else ""
+    return p[2:] if p.startswith("./") else p
+
+
+def _counts_as_edit(path: str, cwd: str, ignore: list[str], project_dirs: Iterable[str] = ()) -> bool:
     if not path:
         return True
     p = path.replace("\\", "/")
     if _DOC_EXT.search(p) or _DOC_NAME.search(p) or _GENERATED.search(p) or "/docs/" in f"/{p}":
         return False
     if any(re.search(rx, f"/{p.lstrip('/')}") for rx in ignore):
+        return False
+    # A repo's folders only match from the project root, so "Users" or "home"
+    # can't hide every absolute path.
+    rel = _project_relative(p, cwd)
+    if rel and any(rel == d or rel.startswith(d + "/") for d in project_dirs):
         return False
     if cwd and (p.startswith("/") or os.path.isabs(p)):
         root = cwd.replace("\\", "/").rstrip("/") + "/"
@@ -690,12 +707,11 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
         return Verdict(False)
     cwd = cwd or tr.cwd
     ignore = list(cfg.get("ignore_paths", []))
-    ignore += [re.escape(f"/{d}/") for d in cfg.get("project_ignore_dirs", [])]
     extra = cfg.get("extra_commands") or {}
 
     last_edit = -1
     for i, ev in enumerate(tr.events):
-        if ev.kind == "edit" and _counts_as_edit(ev.path, cwd, ignore):
+        if ev.kind == "edit" and _counts_as_edit(ev.path, cwd, ignore, cfg.get("project_ignore_dirs", [])):
             last_edit = i
     after = tr.events[last_edit + 1 :]
     if any(ev.kind == "delegate" for ev in after):
@@ -765,6 +781,16 @@ def _clip(s: str, n: int = 140) -> str:
 PROJECT_KEYS = ("ignore_paths",)
 
 
+def _real_home() -> Path:
+    # HOME can be set by a project's agent settings, so ask the OS instead.
+    if pwd is not None:
+        try:
+            return Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except (KeyError, OSError):
+            pass
+    return Path.home()
+
+
 def _inside(path: Path, folder: Path | None) -> bool:
     return folder is not None and (path == folder or folder in path.parents)
 
@@ -772,12 +798,14 @@ def _inside(path: Path, folder: Path | None) -> bool:
 def user_config_path(project: Path | None = None) -> Path:
     # A repository can set environment variables for the agent (for example in
     # .claude/settings.json), so neither variable may point back into the project.
-    home = (Path.home() / ".config").resolve()
+    home = (_real_home() / ".config").resolve()
     xdg = os.environ.get("XDG_CONFIG_HOME")
     base = Path(xdg).expanduser().resolve() if xdg and os.path.isabs(xdg) else home
     if _inside(base, project):
         base = home
     default = base / "show-receipts" / "config.json"
+    if _inside(base, project):
+        return Path(os.devnull)  # even the real home is inside the project: use no config
     override = os.environ.get("SHOW_RECEIPTS_CONFIG")
     if not override:
         return default
@@ -838,10 +866,14 @@ def load_config(cwd: str) -> dict:
     return cfg
 
 
-def _find_codex_transcript(session_id: str) -> Path | None:
+def _find_codex_transcript(session_id: str, cwd: str = "") -> Path | None:
     if not session_id:
         return None
-    base = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "sessions"
+    home = _real_home() / ".codex"
+    env = os.environ.get("CODEX_HOME")
+    if env and not _inside(Path(env).expanduser().resolve(), Path(cwd).resolve() if cwd else None):
+        home = Path(env).expanduser()
+    base = home / "sessions"
     if not base.is_dir():
         return None
     hits = sorted(base.rglob(f"*{session_id}*.jsonl"), key=lambda p: p.stat().st_mtime)
@@ -875,15 +907,13 @@ def _record_block(session_id: str, turn: str, n: int) -> bool:
 
 def run_hook(payload: dict) -> dict | None:
     """Return the JSON to print (a block decision) or None to allow."""
-    if os.environ.get("SHOW_RECEIPTS_DISABLE"):
-        return None
     cwd = str(payload.get("cwd") or os.getcwd())
     cfg = load_config(cwd)
     if cfg.get("enabled") is False:
         return None
     session = str(payload.get("session_id") or "")
     tpath = payload.get("transcript_path")
-    path = Path(tpath).expanduser() if tpath else _find_codex_transcript(session)
+    path = Path(tpath).expanduser() if tpath else _find_codex_transcript(session, cwd)
     if not path or not path.is_file():
         return None
     tr = parse_transcript(path)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 (2026-10-12)
+
+- `SHOW_RECEIPTS_DISABLE` is gone, since a project's agent settings can set environment variables. Use `"enabled": false` or `disabled_projects` in your own config instead.
+- A repo's ignore folders now match from the project root, so an entry like `"Users"` or `"home"` can't hide every edit.
+- The user config and Codex sessions are found through your real home folder, and `HOME`/`CODEX_HOME` pointing into the project are ignored.
+
 ## 0.3.2 (2026-10-12)
 
 - `ignore_paths` in a repo's `.show-receipts.json` are now folder names matched literally, not regexes. Before, `"."` there ignored every edit, which turned the check off. Your own config still takes regexes, and those now also match relative paths.
