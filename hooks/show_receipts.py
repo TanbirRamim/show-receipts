@@ -673,7 +673,7 @@ def _counts_as_edit(path: str, cwd: str, ignore: list[str]) -> bool:
     p = path.replace("\\", "/")
     if _DOC_EXT.search(p) or _DOC_NAME.search(p) or _GENERATED.search(p) or "/docs/" in f"/{p}":
         return False
-    if any(re.search(rx, p) for rx in ignore):
+    if any(re.search(rx, f"/{p.lstrip('/')}") for rx in ignore):
         return False
     if cwd and (p.startswith("/") or os.path.isabs(p)):
         root = cwd.replace("\\", "/").rstrip("/") + "/"
@@ -690,6 +690,7 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
         return Verdict(False)
     cwd = cwd or tr.cwd
     ignore = list(cfg.get("ignore_paths", []))
+    ignore += [re.escape(f"/{d}/") for d in cfg.get("project_ignore_dirs", [])]
     extra = cfg.get("extra_commands") or {}
 
     last_edit = -1
@@ -805,6 +806,20 @@ def _project_config(cwd: str) -> tuple[dict, Path | None]:
     return {}, None
 
 
+_FOLDER = re.compile(r"[\w.-]+(/[\w.-]+)*")
+
+
+def _project_ignore_dir(entry: object) -> str | None:
+    # Project entries are folder names matched literally, not regexes, so a repo
+    # can't ignore every edit with "." and quietly switch the check off.
+    if not isinstance(entry, str):
+        return None
+    d = entry.strip().strip("/")
+    if not _FOLDER.fullmatch(d) or any(part in (".", "..") for part in d.split("/")):
+        return None
+    return d
+
+
 def load_config(cwd: str) -> dict:
     project, root = _project_config(cwd)
     user = _read_json(user_config_path(root or Path(cwd or ".").resolve()))
@@ -817,12 +832,9 @@ def load_config(cwd: str) -> dict:
             continue
         if here == off or off in here.parents or (root is not None and root == off):
             cfg["enabled"] = False
-    ignore = list(user.get("ignore_paths") or [])
-    for key in PROJECT_KEYS:
-        if key == "ignore_paths":
-            ignore += [x for x in project.get(key) or [] if isinstance(x, str)]
-    if ignore:
-        cfg["ignore_paths"] = ignore
+    dirs = [d for d in (_project_ignore_dir(x) for x in project.get("ignore_paths") or []) if d]
+    if dirs:
+        cfg["project_ignore_dirs"] = dirs
     return cfg
 
 
