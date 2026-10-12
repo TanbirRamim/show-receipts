@@ -23,7 +23,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 CONFIG_NAME = ".show-receipts.json"
 CATEGORIES = ("tests", "build", "lint")

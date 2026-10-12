@@ -1,6 +1,6 @@
 {
   "name": "show-receipts",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Stop hook that makes your agent prove \"tests pass\" before it says it. Blocks the stop when no matching command ran and passed after the last edit.",
   "author": { "name": "Tanbir Hossain Ramim", "url": "https://github.com/TanbirRamim" },
   "homepage": "https://github.com/TanbirRamim/show-receipts",
