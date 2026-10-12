@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 (2026-10-12)
+
+- `ignore_paths` in a repo's `.show-receipts.json` are now folder names matched literally, not regexes. Before, `"."` there ignored every edit, which turned the check off. Your own config still takes regexes, and those now also match relative paths.
+
 ## 0.3.1 (2026-10-12)
 
 - `SHOW_RECEIPTS_CONFIG` is only honored when it points under your config folder and outside the project, and an `XDG_CONFIG_HOME` inside the project is ignored, so a repo can't use project-level env settings to load its own config. Thanks again to @davepoon.

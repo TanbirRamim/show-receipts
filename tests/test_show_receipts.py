@@ -524,6 +524,8 @@ class VerdictTests(unittest.TestCase):
         rows = [user("x"), edit(), bash("pytest", True, "1 passed"), edit("/repo/gen/schema.py"), say("Tests pass.")]
         self.assertTrue(verdict(rows).block)
         self.assertFalse(verdict(rows, config={"ignore_paths": ["/gen/"]}).block)
+        self.assertFalse(verdict(rows, config={"project_ignore_dirs": ["gen"]}).block)
+        self.assertTrue(verdict(rows, config={"project_ignore_dirs": ["ge"]}).block)
 
 
 # --------------------------------------------------------------------------
@@ -730,7 +732,20 @@ class HookTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.xdg)}):
             os.environ.pop("SHOW_RECEIPTS_CONFIG", None)
             cfg = sr.load_config(str(proj))
-        self.assertEqual(cfg, {"ignore_paths": ["/a/", "/gen/"], "max_blocks": 2})
+        self.assertEqual(cfg, {"ignore_paths": ["/a/"], "max_blocks": 2, "project_ignore_dirs": ["gen"]})
+
+    def test_repo_ignore_paths_are_folders_not_regexes(self):
+        bad = [".", "/", "", "*", ".*", "..", "a|b", "src/../..", 3]
+        self.assertEqual([sr._project_ignore_dir(x) for x in bad], [None] * len(bad))
+        self.assertEqual(sr._project_ignore_dir("/generated/"), "generated")
+        self.assertEqual(sr._project_ignore_dir("web/dist"), "web/dist")
+
+    def test_repo_cannot_ignore_every_edit(self):
+        rows = [user("fix"), edit()]
+        proj = Path(self.tmp.name) / "proj"
+        proj.mkdir()
+        (proj / ".show-receipts.json").write_text(json.dumps({"ignore_paths": ["."]}))
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
 
     def test_codex_payload_without_transcript_path(self):
         home = Path(self.tmp.name) / "codex"
