@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 (2026-10-12)
+
+- `SHOW_RECEIPTS_CONFIG` is only honored when it points under your config folder and outside the project, and an `XDG_CONFIG_HOME` inside the project is ignored, so a repo can't use project-level env settings to load its own config. Thanks again to @davepoon.
+
 ## 0.3.0 (2026-10-12)
 
 - Settings moved to your own config (`~/.config/show-receipts/config.json`). A repo's `.show-receipts.json` can now only add `ignore_paths`; it can no longer turn the check off, change the claims, `max_blocks` or `extra_commands`. Use `disabled_projects` in your config to turn it off for a folder. Thanks to @davepoon for pointing this out.
