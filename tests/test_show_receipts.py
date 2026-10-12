@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import ClassVar
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "show_receipts.py"
@@ -618,10 +619,10 @@ class TranscriptFixtureTests(unittest.TestCase):
 class HookTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.env = dict(
-            os.environ, TMPDIR=self.tmp.name, SHOW_RECEIPTS_CONFIG=str(Path(self.tmp.name) / "no-user-config.json")
-        )
+        self.xdg = Path(self.tmp.name) / "xdg"
+        self.env = dict(os.environ, TMPDIR=self.tmp.name, XDG_CONFIG_HOME=str(self.xdg))
         self.env.pop("SHOW_RECEIPTS_DISABLE", None)
+        self.env.pop("SHOW_RECEIPTS_CONFIG", None)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -674,6 +675,12 @@ class HookTests(unittest.TestCase):
             r = subprocess.run([sys.executable, str(HOOK)], input=stdin, capture_output=True, text=True, env=self.env)
             self.assertEqual((r.returncode, r.stdout), (0, ""))
 
+    def write_user_config(self, data: dict, name: str = "config.json") -> Path:
+        f = self.xdg / "show-receipts" / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(data))
+        return f
+
     def test_disable_env_and_config(self):
         rows = [user("fix"), edit()]
         self.env["SHOW_RECEIPTS_DISABLE"] = "1"
@@ -681,36 +688,48 @@ class HookTests(unittest.TestCase):
         del self.env["SHOW_RECEIPTS_DISABLE"]
         proj = Path(self.tmp.name) / "proj"
         proj.mkdir()
-        user_cfg = Path(self.tmp.name) / "user.json"
-        user_cfg.write_text(json.dumps({"disabled_projects": [str(proj)]}))
-        self.env["SHOW_RECEIPTS_CONFIG"] = str(user_cfg)
+        self.write_user_config({"disabled_projects": [str(proj)]})
         self.assertIsNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
 
     def test_repo_config_cannot_turn_the_check_off(self):
         rows = [user("fix"), edit()]
         proj = Path(self.tmp.name) / "proj"
         proj.mkdir()
-        self.env["SHOW_RECEIPTS_CONFIG"] = str(Path(self.tmp.name) / "none.json")
         (proj / ".show-receipts.json").write_text(
             json.dumps({"enabled": False, "claims": [], "max_blocks": 0, "extra_commands": {"tests": ["^true"]}})
         )
         self.assertIsNotNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
 
+    def test_config_env_pointing_into_the_project_is_ignored(self):
+        rows = [user("fix"), edit()]
+        proj = Path(self.tmp.name) / "proj"
+        (proj / ".git").mkdir(parents=True)
+        (proj / "show-receipts").mkdir()
+        evil = proj / "show-receipts" / "config.json"
+        evil.write_text('{"enabled": false}')
+        self.env["SHOW_RECEIPTS_CONFIG"] = str(evil)
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", cwd=str(proj)))
+        # Moving the config dir into the repo doesn't help either.
+        self.env["XDG_CONFIG_HOME"] = str(proj)
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", cwd=str(proj / "show-receipts"), session_id="s2"))
+
+    def test_config_env_under_the_config_dir_is_honored(self):
+        rows = [user("fix"), edit()]
+        self.env["SHOW_RECEIPTS_CONFIG"] = str(self.write_user_config({"enabled": False}, "work.json"))
+        self.assertIsNone(self.run_hook(rows, "Tests pass."))
+        outside = Path(self.tmp.name) / "elsewhere.json"
+        outside.write_text('{"enabled": false}')
+        self.env["SHOW_RECEIPTS_CONFIG"] = str(outside)
+        self.assertIsNotNone(self.run_hook(rows, "Tests pass.", session_id="s2"))
+
     def test_repo_config_only_adds_ignore_paths(self):
         proj = Path(self.tmp.name) / "proj"
         proj.mkdir()
-        user_cfg = Path(self.tmp.name) / "user.json"
-        user_cfg.write_text(json.dumps({"ignore_paths": ["/a/"], "max_blocks": 2}))
+        self.write_user_config({"ignore_paths": ["/a/"], "max_blocks": 2})
         (proj / ".show-receipts.json").write_text(json.dumps({"ignore_paths": ["/gen/"], "enabled": False}))
-        old = os.environ.get("SHOW_RECEIPTS_CONFIG")
-        os.environ["SHOW_RECEIPTS_CONFIG"] = str(user_cfg)
-        try:
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.xdg)}):
+            os.environ.pop("SHOW_RECEIPTS_CONFIG", None)
             cfg = sr.load_config(str(proj))
-        finally:
-            if old is None:
-                del os.environ["SHOW_RECEIPTS_CONFIG"]
-            else:
-                os.environ["SHOW_RECEIPTS_CONFIG"] = old
         self.assertEqual(cfg, {"ignore_paths": ["/a/", "/gen/"], "max_blocks": 2})
 
     def test_codex_payload_without_transcript_path(self):

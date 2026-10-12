@@ -110,7 +110,7 @@ The plugin also ships a small skill that asks the agent to end with a receipts b
 
 ## Config
 
-Optional. Your settings live in your own config, `~/.config/show-receipts/config.json` (or `$XDG_CONFIG_HOME/show-receipts/config.json`, or the path in `SHOW_RECEIPTS_CONFIG`):
+Optional. Your settings live in your own config, `~/.config/show-receipts/config.json` (or `$XDG_CONFIG_HOME/show-receipts/config.json`, or another file in that folder named by `SHOW_RECEIPTS_CONFIG`):
 
 ```json
 {
@@ -124,7 +124,7 @@ Optional. Your settings live in your own config, `~/.config/show-receipts/config
 
 `"enabled": false` turns it off everywhere, `disabled_projects` turns it off for those folders. `SHOW_RECEIPTS_DISABLE=1` also turns it off everywhere. `SHOW_RECEIPTS_DEBUG=1` prints errors to stderr instead of silently allowing.
 
-A repository can ship a `.show-receipts.json` too, but only its `ignore_paths` are read. A repo you just cloned can't switch the check off or decide which commands count as proof.
+A repository can ship a `.show-receipts.json` too, but only its `ignore_paths` are read. A repo you just cloned can't switch the check off or decide which commands count as proof. That also covers environment variables a project sets for the agent: `SHOW_RECEIPTS_CONFIG` is only used when it points under your config folder, and neither it nor `XDG_CONFIG_HOME` is used when it points into the project.
 
 Check one transcript by hand:
 

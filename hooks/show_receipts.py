@@ -764,11 +764,26 @@ def _clip(s: str, n: int = 140) -> str:
 PROJECT_KEYS = ("ignore_paths",)
 
 
-def user_config_path() -> Path:
-    if os.environ.get("SHOW_RECEIPTS_CONFIG"):
-        return Path(os.environ["SHOW_RECEIPTS_CONFIG"]).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "show-receipts" / "config.json"
+def _inside(path: Path, folder: Path | None) -> bool:
+    return folder is not None and (path == folder or folder in path.parents)
+
+
+def user_config_path(project: Path | None = None) -> Path:
+    # A repository can set environment variables for the agent (for example in
+    # .claude/settings.json), so neither variable may point back into the project.
+    home = (Path.home() / ".config").resolve()
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg).expanduser().resolve() if xdg and os.path.isabs(xdg) else home
+    if _inside(base, project):
+        base = home
+    default = base / "show-receipts" / "config.json"
+    override = os.environ.get("SHOW_RECEIPTS_CONFIG")
+    if not override:
+        return default
+    path = Path(override).expanduser().resolve()
+    if _inside(path, base) and not _inside(path, project):
+        return path
+    return default
 
 
 def _read_json(f: Path) -> dict:
@@ -791,8 +806,8 @@ def _project_config(cwd: str) -> tuple[dict, Path | None]:
 
 
 def load_config(cwd: str) -> dict:
-    user = _read_json(user_config_path())
     project, root = _project_config(cwd)
+    user = _read_json(user_config_path(root or Path(cwd or ".").resolve()))
     cfg = {k: v for k, v in user.items() if k != "disabled_projects"}
     here = Path(cwd or ".").resolve()
     for p in user.get("disabled_projects") or []:
