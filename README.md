@@ -122,9 +122,9 @@ Optional. Your settings live in your own config, `~/.config/show-receipts/config
 }
 ```
 
-`"enabled": false` turns it off everywhere, `disabled_projects` turns it off for those folders. `SHOW_RECEIPTS_DISABLE=1` also turns it off everywhere. `SHOW_RECEIPTS_DEBUG=1` prints errors to stderr instead of silently allowing.
+`"enabled": false` turns it off everywhere, `disabled_projects` turns it off for those folders. `SHOW_RECEIPTS_DEBUG=1` prints errors to stderr instead of silently allowing.
 
-A repository can ship a `.show-receipts.json` too, but only its `ignore_paths` are read, and there they're plain folder names (`"generated"`, `"web/dist"`), not regexes, so a repo can't ignore every edit with `"."`. Regexes in `ignore_paths` work in your own config. A repo you just cloned can't switch the check off or decide which commands count as proof. That also covers environment variables a project sets for the agent: `SHOW_RECEIPTS_CONFIG` is only used when it points under your config folder, and neither it nor `XDG_CONFIG_HOME` is used when it points into the project.
+A repository can ship a `.show-receipts.json` too, but only its `ignore_paths` are read, and there they're plain folder names matched from the project root (`"generated"`, `"web/dist"`), not regexes, so a repo can't ignore every edit with `"."`. Regexes in `ignore_paths` work in your own config. A repo you just cloned can't switch the check off or decide which commands count as proof. That also covers environment variables a project sets for the agent: `SHOW_RECEIPTS_CONFIG` is only used when it points under your config folder, and neither it, `XDG_CONFIG_HOME`, `HOME` nor `CODEX_HOME` is used when it points into the project. There's no environment variable that turns the check off, for the same reason.
 
 Check one transcript by hand:
 
