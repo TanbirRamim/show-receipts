@@ -520,6 +520,14 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(verdict(rows).block)
         self.assertFalse(verdict(rows, config={"claims": ["tests"]}).block)
 
+    def test_code_named_like_docs_still_counts(self):
+        for path in ("/repo/CMakeLists.txt", "/repo/requirements-dev.txt", "/repo/docs/conf.py", "/repo/docs/site.yml"):
+            rows = [user("x"), edit(), bash("pytest", True, "1 passed"), edit(path), say("Tests pass.")]
+            self.assertTrue(verdict(rows).block, path)
+        for path in ("/repo/notes.txt", "/repo/docs/guide.rst", "/repo/docs/img/arch.svg"):
+            rows = [user("x"), edit(), bash("pytest", True, "1 passed"), edit(path), say("Tests pass.")]
+            self.assertFalse(verdict(rows).block, path)
+
     def test_config_ignore_paths(self):
         rows = [user("x"), edit(), bash("pytest", True, "1 passed"), edit("/repo/gen/schema.py"), say("Tests pass.")]
         self.assertTrue(verdict(rows).block)

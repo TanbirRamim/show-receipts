@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 (2026-10-12)
+
+- Edits to `CMakeLists.txt`, `requirements*.txt`, `constraints*.txt` and code files under `docs/` (like Sphinx `conf.py`) now count as code edits. Before, they were treated as docs, so a "tests pass" after changing them went unchecked.
+
 ## 0.3.3 (2026-10-12)
 
 - `SHOW_RECEIPTS_DISABLE` is gone, since a project's agent settings can set environment variables. Use `"enabled": false` or `disabled_projects` in your own config instead.

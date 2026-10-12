@@ -469,6 +469,12 @@ class Transcript:
 
 
 _DOC_EXT = re.compile(r"\.(?:md|mdx|markdown|txt|rst|adoc|org|csv|log)$", re.I)
+# .txt files that drive a build or an install are code, not notes.
+_TXT_CODE = re.compile(r"(?:^|/)(?:CMakeLists|requirements[\w.-]*|constraints[\w.-]*)\.txt$", re.I)
+# Code that lives under docs/ (Sphinx conf.py, doctest helpers, docs site config) still counts.
+_CODE_EXT = re.compile(
+    r"\.(?:py|pyi|js|mjs|cjs|ts|tsx|jsx|go|rs|rb|java|kt|c|h|cc|cpp|hpp|cs|swift|php|sh|toml|ya?ml|json)$", re.I
+)
 _DOC_NAME = re.compile(r"(?:^|/)(?:LICENSE|LICENCE|NOTICE|AUTHORS|CHANGELOG|CHANGES)[^/]*$", re.I)
 _GENERATED = re.compile(
     r"(?:^|/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|poetry\.lock|uv\.lock|"
@@ -683,7 +689,8 @@ def _counts_as_edit(path: str, cwd: str, ignore: list[str], project_dirs: Iterab
     if not path:
         return True
     p = path.replace("\\", "/")
-    if _DOC_EXT.search(p) or _DOC_NAME.search(p) or _GENERATED.search(p) or "/docs/" in f"/{p}":
+    is_doc = (_DOC_EXT.search(p) and not _TXT_CODE.search(p)) or ("/docs/" in f"/{p}" and not _CODE_EXT.search(p))
+    if is_doc or _DOC_NAME.search(p) or _GENERATED.search(p):
         return False
     if any(re.search(rx, f"/{p.lstrip('/')}") for rx in ignore):
         return False
