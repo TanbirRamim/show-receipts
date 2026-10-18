@@ -6,7 +6,7 @@ this hook reads the session transcript and looks for a matching command that
 ran after the last code edit and exited 0. If there is none, the stop is
 blocked and the agent is told which claim has no receipt.
 
-Works with Claude Code and Codex transcripts. Standard library only.
+Works with Claude Code, Codex and Gemini CLI transcripts. Standard library only.
 When in doubt it allows: its own errors never block a stop.
 """
 
@@ -440,7 +440,7 @@ _TEST_FAIL_OUTPUT = re.compile(
 
 
 # --------------------------------------------------------------------------
-# Transcript parsing (Claude Code and Codex)
+# Transcript parsing (Claude Code, Codex and Gemini CLI)
 # --------------------------------------------------------------------------
 
 
@@ -512,12 +512,145 @@ def _read_lines(path: Path) -> Iterator[dict]:
 def parse_transcript(path: Path) -> Transcript:
     tr = Transcript()
     pending: dict[str, Event] = {}
-    for obj in _read_lines(path):
+    objs = list(_read_lines(path))
+    if not objs:
+        objs = _read_whole_json(path)
+    if objs and any(_is_gemini(o) for o in objs[:3]):
+        _parse_gemini(objs, tr)
+        return tr
+    for obj in objs:
         if "payload" in obj and obj.get("type") in ("response_item", "event_msg", "session_meta", "turn_context"):
             _parse_codex(obj, tr, pending)
         else:
             _parse_claude(obj, tr, pending)
     return tr
+
+
+def _read_whole_json(path: Path) -> list[dict]:
+    """Older Gemini CLI sessions are one pretty-printed JSON object, not JSONL."""
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return []
+    return [obj] if isinstance(obj, dict) else []
+
+
+# Gemini CLI session files (~/.gemini/tmp/<project>/chats/session-*.jsonl).
+# Format per packages/core/src/services/chatRecordingTypes.ts and the loader in
+# chatRecordingService.ts (google-gemini/gemini-cli): a metadata line
+# {sessionId, projectHash, ...}, then MessageRecords {id, type: "user"|"gemini"|
+# "info"|..., content, toolCalls?}. A message is re-appended in full under the
+# same id when it changes (tool results arrive that way), and "$rewindTo",
+# "$patch" and "$set" lines edit what came before. Legacy files are a single
+# ConversationRecord {sessionId, messages: [...]}.
+_GEMINI_SHELL = {"run_shell_command"}
+_GEMINI_EDIT = {"write_file", "replace"}
+_GEMINI_DELEGATE = {"invoke_agent"}
+_GEMINI_EXIT = re.compile(r"^Exit Code: (-?\d+)$", re.M)
+
+
+def _is_gemini(obj: dict) -> bool:
+    if "sessionId" in obj and ("projectHash" in obj or isinstance(obj.get("messages"), list)):
+        return True
+    return any(k in obj for k in ("$rewindTo", "$patch", "$set"))
+
+
+def _gemini_messages(objs: list[dict]) -> list[dict]:
+    msgs: dict[str, dict] = {}  # insertion order is message order, like the CLI's own Map
+    for obj in objs:
+        if isinstance(obj.get("messages"), list):  # legacy whole-file record
+            msgs = {str(m.get("id")): m for m in obj["messages"] if isinstance(m, dict)}
+        elif "$rewindTo" in obj:
+            ids = list(msgs)
+            rid = obj["$rewindTo"]
+            msgs = {k: msgs[k] for k in ids[: ids.index(rid)]} if rid in msgs else {}
+        elif isinstance(obj.get("$set"), dict):
+            if isinstance(obj["$set"].get("messages"), list):
+                msgs = {str(m.get("id")): m for m in obj["$set"]["messages"] if isinstance(m, dict)}
+        elif isinstance(obj.get("$patch"), dict):
+            patch = obj["$patch"]
+            for up in [patch, *(patch.get("updates") or [])]:
+                m = msgs.get(str(up.get("id"))) if isinstance(up, dict) else None
+                if m is None:
+                    continue
+                if "content" in up:
+                    m["content"] = up["content"]
+                for tp in up.get("toolCalls") or []:
+                    for tc in m.get("toolCalls") or []:
+                        if (
+                            isinstance(tp, dict)
+                            and isinstance(tc, dict)
+                            and tc.get("id") == tp.get("id")
+                            and "result" in tp
+                        ):
+                            tc["result"] = tp["result"]
+            for rid in patch.get("removeIds") or []:
+                msgs.pop(str(rid), None)
+            order = [str(i) for i in patch.get("orderIds") or [] if str(i) in msgs]
+            if order:
+                rest = [k for k in msgs if k not in order]
+                msgs = {k: msgs[k] for k in rest + order}
+        elif "id" in obj and "type" in obj:
+            msgs[str(obj["id"])] = obj
+    return list(msgs.values())
+
+
+def _gemini_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        content = [content]
+    if isinstance(content, list):
+        out = []
+        for c in content:
+            if isinstance(c, str):
+                out.append(c)
+            elif isinstance(c, dict) and isinstance(c.get("text"), str) and not c.get("thought"):
+                out.append(c["text"])
+            elif isinstance(c, dict) and isinstance(c.get("functionResponse"), dict):
+                resp = c["functionResponse"].get("response")
+                if isinstance(resp, dict):
+                    out.append(str(resp.get("output") or resp.get("error") or ""))
+        return "\n".join(out)
+    return ""
+
+
+def _parse_gemini(objs: list[dict], tr: Transcript) -> None:
+    for m in _gemini_messages(objs):
+        typ = m.get("type")
+        if typ == "user":
+            tr.end_turn()
+            tr.last_user_id = str(m.get("id") or tr.last_user_id)
+            continue
+        if typ != "gemini":
+            continue
+        for tc in m.get("toolCalls") or []:
+            if not isinstance(tc, dict):
+                continue
+            name, args, status = tc.get("name"), tc.get("args") or {}, tc.get("status")
+            if not isinstance(args, dict):
+                args = {}
+            if name in _GEMINI_SHELL:
+                out = _gemini_text(tc.get("result"))
+                ok: bool | None
+                if args.get("is_background") or "Command moved to background" in out:
+                    ok = None
+                elif status in ("error", "cancelled"):
+                    ok = False
+                elif status != "success" or tc.get("result") is None:
+                    ok = None
+                else:
+                    # shell.ts only adds "Exit Code: N" to the output when N != 0.
+                    code = _GEMINI_EXIT.search(out)
+                    ok = code is None or int(code.group(1)) == 0
+                tr.events.append(Event("cmd", command=str(args.get("command") or ""), ok=ok, output=out[-4000:]))
+            elif name in _GEMINI_EDIT and status not in ("error", "cancelled"):
+                tr.events.append(Event("edit", path=str(args.get("file_path") or "")))
+            elif name in _GEMINI_DELEGATE:
+                tr.events.append(Event("delegate"))
+        text = _gemini_text(m.get("content"))
+        if text.strip():
+            tr.last_assistant_text = text
 
 
 def _parse_claude(obj: dict, tr: Transcript, pending: dict[str, Event]) -> None:
@@ -902,6 +1035,13 @@ def _blocks_so_far(session_id: str, turn: str) -> int | None:
         return None
 
 
+def _recorded_turn(session_id: str) -> str:
+    try:
+        return str(json.loads(_state_file(session_id).read_text()).get("turn") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
 def _record_block(session_id: str, turn: str, n: int) -> bool:
     try:
         f = _state_file(session_id)
@@ -925,6 +1065,8 @@ def run_hook(payload: dict) -> dict | None:
         return None
     tr = parse_transcript(path)
     message = payload.get("last_assistant_message")
+    if message is None:
+        message = payload.get("prompt_response")  # Gemini CLI AfterAgent
     if not isinstance(message, str) or not message.strip():
         message = tr.last_assistant_text
     verdict = evaluate(tr, message, cfg, cwd)
@@ -934,6 +1076,11 @@ def run_hook(payload: dict) -> dict | None:
     # Loop guard: at most max_blocks per user prompt. If we can't keep count,
     # fall back to the host's own flag and never block a continued stop.
     turn = str(payload.get("prompt_id") or payload.get("turn_id") or tr.last_user_id or "")
+    if payload.get("hook_event_name") == "AfterAgent" and payload.get("stop_hook_active") and session:
+        # Gemini CLI sends our reason back as a new user message in the same
+        # prompt (client.ts, stopHookActive=true), so keep counting on the
+        # turn we blocked rather than starting over.
+        turn = _recorded_turn(session) or turn
     max_blocks = int(cfg.get("max_blocks", 1))
     so_far = _blocks_so_far(session, turn) if session and turn else None
     if so_far is None:

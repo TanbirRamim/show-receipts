@@ -23,7 +23,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover tests -v
       - name: Plugin manifests are valid JSON
-        run: python -c "import json,sys; [json.load(open(f)) for f in sys.argv[1:]]" .claude-plugin/plugin.json .claude-plugin/marketplace.json hooks/hooks.json examples/claude-settings.json examples/codex-hooks.json examples/show-receipts.json examples/user-config.json
+        run: python -c "import json,sys; [json.load(open(f)) for f in sys.argv[1:]]" .claude-plugin/plugin.json .claude-plugin/marketplace.json hooks/hooks.json examples/claude-settings.json examples/codex-hooks.json examples/gemini-settings.json examples/show-receipts.json examples/user-config.json
 
   lint:
     runs-on: ubuntu-latest

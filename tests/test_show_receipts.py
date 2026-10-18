@@ -794,6 +794,190 @@ class HookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
 
 
+# --------------------------------------------------------------------------
+# Gemini CLI: session JSONL (chatRecordingService.ts) and the AfterAgent hook
+# --------------------------------------------------------------------------
+
+
+def _gemini_rows() -> list[dict]:
+    return _load("gemini_pytest_proven.jsonl")
+
+
+def _gemini_shell(cid: str, command: str, output: str, status: str = "success") -> dict:
+    res = [{"functionResponse": {"id": cid, "name": "run_shell_command", "response": {"output": output}}}]
+    return {"id": cid, "name": "run_shell_command", "args": {"command": command}, "status": status, "result": res}
+
+
+def _gemini_msg(mid: str, text="", calls=()) -> dict:
+    return {"id": mid, "type": "gemini", "content": text, "toolCalls": list(calls)}
+
+
+class GeminiTests(unittest.TestCase):
+    def parse(self, rows):
+        with tempfile.TemporaryDirectory() as d:
+            return sr.parse_transcript(write_jsonl(rows, d))
+
+    def verdict(self, rows):
+        with tempfile.TemporaryDirectory() as d:
+            p = write_jsonl(rows, d)
+            tr = sr.parse_transcript(p)
+            return sr.evaluate(tr, tr.last_assistant_text, cwd="/home/dev/projects/tiny-cache")
+
+    def test_fixture_is_proven(self):
+        self.assertFalse(self.verdict(_gemini_rows()).block)
+
+    def test_fixture_without_the_passing_run_is_blocked(self):
+        rows = [r for r in _gemini_rows() if not any(c.get("id") == "shell-2" for c in r.get("toolCalls") or [])]
+        v = self.verdict(rows)
+        self.assertTrue(v.block)
+        self.assertIn("tests", v.missing)
+
+    def test_failing_exit_code_is_a_failed_run(self):
+        rows = _gemini_rows()[:2]
+        rows.append(
+            _gemini_msg(
+                "e",
+                calls=[
+                    {
+                        "id": "r",
+                        "name": "write_file",
+                        "args": {"file_path": "/home/dev/projects/tiny-cache/a.py"},
+                        "status": "success",
+                    }
+                ],
+            )
+        )
+        rows.append(_gemini_msg("t", "Tests pass.", [_gemini_shell("s", "pytest", "Output: 1 failed\nExit Code: 1")]))
+        v = self.verdict(rows)
+        self.assertTrue(v.block)
+        self.assertIn("tests", v.failed)
+
+    def test_later_message_versions_replace_earlier_ones(self):
+        # The CLI re-appends a whole message under the same id when it changes.
+        rows = [
+            *_gemini_rows()[:2],
+            _gemini_msg("m", calls=[_gemini_shell("s", "pytest", "Output: 2 passed")]),
+            _gemini_msg(
+                "m",
+                calls=[
+                    _gemini_shell("s", "pytest", "Output: 2 passed"),
+                    {
+                        "id": "w",
+                        "name": "replace",
+                        "args": {"file_path": "/home/dev/projects/tiny-cache/a.py"},
+                        "status": "success",
+                    },
+                ],
+            ),
+            _gemini_msg("f", "All tests pass."),
+        ]
+        tr = self.parse(rows)
+        self.assertEqual([e.kind for e in tr.events], ["cmd", "edit"])
+        self.assertTrue(self.verdict(rows).block)
+
+    def test_rewind_and_patch_records(self):
+        rows = [
+            *_gemini_rows()[:2],
+            _gemini_msg(
+                "m1", calls=[{"id": "w", "name": "replace", "args": {"file_path": "/x/a.py"}, "status": "success"}]
+            ),
+            {"$rewindTo": "m1"},
+            _gemini_msg("m2", calls=[_gemini_shell("s", "pytest", "")]),
+            {
+                "$patch": {
+                    "id": "m2",
+                    "toolCalls": [
+                        {
+                            "id": "s",
+                            "result": [{"functionResponse": {"response": {"output": "Output: x\nExit Code: 2"}}}],
+                        }
+                    ],
+                }
+            },
+        ]
+        tr = self.parse(rows)
+        self.assertEqual([(e.kind, e.ok) for e in tr.events], [("cmd", False)])
+
+    def test_background_and_cancelled_commands(self):
+        rows = [
+            *_gemini_rows()[:2],
+            _gemini_msg(
+                "m",
+                calls=[
+                    dict(
+                        _gemini_shell("a", "pytest", "Command moved to background (PID: 9)."),
+                        args={"command": "pytest", "is_background": True},
+                    ),
+                    _gemini_shell("b", "pytest", "Command was cancelled by user", status="cancelled"),
+                ],
+            ),
+        ]
+        tr = self.parse(rows)
+        self.assertEqual([e.ok for e in tr.events], [None, False])
+
+    def test_delegate_and_legacy_whole_file(self):
+        legacy = {
+            "sessionId": "s",
+            "projectHash": "h",
+            "messages": [
+                {"id": "u", "type": "user", "content": "go"},
+                _gemini_msg(
+                    "a",
+                    calls=[{"id": "w", "name": "write_file", "args": {"file_path": "/x/a.py"}, "status": "success"}],
+                ),
+                _gemini_msg("b", "Tests pass.", [{"id": "i", "name": "invoke_agent", "args": {}, "status": "success"}]),
+            ],
+        }
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "session-legacy.json"
+            p.write_text(json.dumps(legacy, indent=2))
+            tr = sr.parse_transcript(p)
+        self.assertEqual([e.kind for e in tr.events], ["edit", "delegate"])
+        self.assertEqual(tr.last_assistant_text, "Tests pass.")
+
+    def test_claude_and_codex_are_not_mistaken_for_gemini(self):
+        for name in ("claude_pytest_proven.jsonl", "codex_proven.jsonl"):
+            self.assertFalse(any(sr._is_gemini(o) for o in _load(name)[:3]), name)
+
+
+class GeminiHookTests(unittest.TestCase):
+    """The AfterAgent payload: prompt_response instead of last_assistant_message."""
+
+    setUp = HookTests.setUp
+    tearDown = HookTests.tearDown
+    run_hook = HookTests.run_hook
+
+    def gemini(self, rows, response, **payload):
+        data = {
+            "hook_event_name": "AfterAgent",
+            "prompt": "fix it",
+            "prompt_response": response,
+            "timestamp": "2026-10-17T09:00:16Z",
+        }
+        data.update(payload)
+        return self.run_hook(rows, None, **data)
+
+    def test_proven_fixture_is_allowed(self):
+        rows = _gemini_rows()
+        self.assertIsNone(self.gemini(rows, "All 3 tests pass."))
+
+    def test_unproven_blocks_once_then_allows_the_retry(self):
+        rows = [r for r in _gemini_rows() if not any(c.get("id") == "shell-2" for c in r.get("toolCalls") or [])]
+        out = self.gemini(rows, "All 3 tests pass.")
+        self.assertEqual(out["decision"], "block")
+        # Gemini sends our reason back as a new user message, then fires AfterAgent with stop_hook_active.
+        retry = [*rows, {"id": "u-retry", "type": "user", "content": [{"text": out["reason"]}]}]
+        self.assertIsNone(self.gemini(retry, "All 3 tests pass.", stop_hook_active=True))
+
+    def test_odd_payloads_allow(self):
+        for extra in (
+            {"prompt_response": 5},
+            {"transcript_path": ""},
+            {"stop_hook_active": "yes", "prompt_response": None},
+        ):
+            self.assertIsNone(self.gemini([{"sessionId": "s", "projectHash": "h"}], "Tests pass.", **extra))
+
+
 if __name__ == "__main__":
     unittest.main()
 

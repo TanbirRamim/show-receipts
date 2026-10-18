@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "name": "show-receipts",
+            "type": "command",
+            "command": "python3 ~/.gemini/show_receipts.py",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}
