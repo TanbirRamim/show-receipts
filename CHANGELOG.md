@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Gemini CLI support: register the hook as an `AfterAgent` hook (see `examples/gemini-settings.json`). It reads Gemini's session files, both the JSONL kind and older single-JSON ones, counts `run_shell_command` runs by their exit code and `write_file`/`replace` as edits, and blocks at most `max_blocks` times per prompt even though Gemini sends the reason back as a new message (#8).
+
 ## 0.3.4 (2026-10-12)
 
 - Edits to `CMakeLists.txt`, `requirements*.txt`, `constraints*.txt` and code files under `docs/` (like Sphinx `conf.py`) now count as code edits. Before, they were treated as docs, so a "tests pass" after changing them went unchecked.

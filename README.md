@@ -11,7 +11,7 @@ In Claude Code:
 /plugin install show-receipts@show-receipts
 ```
 
-Or from your shell: `claude plugin marketplace add TanbirRamim/show-receipts && claude plugin install show-receipts@show-receipts`. The hook applies from your next session. Codex and manual setups are [below](#other-ways-to-install).
+Or from your shell: `claude plugin marketplace add TanbirRamim/show-receipts && claude plugin install show-receipts@show-receipts`. The hook applies from your next session. Codex, Gemini CLI and manual setups are [below](#other-ways-to-install).
 
 ![A real Claude Code run: the agent says "All tests pass." without running anything, show-receipts blocks the stop, and the agent admits it never ran the tests](assets/demo.svg)
 
@@ -54,7 +54,7 @@ A claim is matched to commands by kind:
 
 `npm run ci`, `make check` and similar count for all three. The run has to come after the last code edit and exit 0. If the exit code was 0 but the output says `2 failed` (a pipe through `tail` does that), it counts as failed.
 
-Edits are Edit/Write tool calls, Codex file changes and `apply_patch`, and files Claude Code saw a Bash command change (`sed -i`, heredocs). Edits to docs (`*.md`, `docs/`, CHANGELOG), lockfiles, build output and files outside the project don't reset the clock. Neither do `git pull` or `git checkout`.
+Edits are Edit/Write tool calls, Codex file changes and `apply_patch`, Gemini CLI `write_file`/`replace` calls, and files Claude Code saw a Bash command change (`sed -i`, heredocs). Edits to docs (`*.md`, `docs/`, CHANGELOG), lockfiles, build output and files outside the project don't reset the clock. Neither do `git pull` or `git checkout`.
 
 ## False positives
 
@@ -82,7 +82,7 @@ python3 hooks/show_receipts.py replay ~/.claude/projects/*/*.jsonl
 - It can't see inside subagents or background jobs, so it allows in those cases.
 - "Fixed" and "done" aren't checked. They're too vague to judge without a lot of false blocks.
 - Needs `python3` on PATH. Windows is only covered by CI so far.
-- Codex support is tested on Codex-format transcripts, but I haven't run it live inside Codex yet.
+- Codex support is tested on Codex-format transcripts, but I haven't run it live inside Codex yet. The same goes for Gemini CLI: the adapter follows its [hooks reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md) and session format, tested with synthetic fixtures.
 
 ## Other ways to install
 
@@ -101,6 +101,14 @@ curl -fsSL https://raw.githubusercontent.com/TanbirRamim/show-receipts/main/hook
 ```
 
 and use [examples/codex-hooks.json](examples/codex-hooks.json).
+
+**Gemini CLI.** Put the script somewhere stable and register it as an `AfterAgent` hook in `~/.gemini/settings.json` (or a project's `.gemini/settings.json`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/TanbirRamim/show-receipts/main/hooks/show_receipts.py -o ~/.gemini/show_receipts.py
+```
+
+and merge [examples/gemini-settings.json](examples/gemini-settings.json) (Gemini's `timeout` is in milliseconds). An unproven claim is rejected once and the reason goes back to the agent as a new prompt; the retry is let through.
 
 **Just the skill, any agent.** `npx skills add TanbirRamim/show-receipts` installs the skill (the receipts habit) into Claude Code, Codex, Cursor and others. That's only the instruction, not the hook, so nothing blocks; use the plugin above if you want the enforcement.
 
