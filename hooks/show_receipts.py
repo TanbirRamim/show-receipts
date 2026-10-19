@@ -299,7 +299,16 @@ _LINT_TOOLS = {
     "ktlint",
     "swiftlint",
     "credo",
+    "yamllint",
+    "hlint",
+    "luacheck",
+    "tflint",
 }
+# Tools whose lint check is a subcommand: the other subcommands rewrite or build,
+# so only "<tool> lint" may prove a lint claim.
+_LINT_SUBCOMMAND_TOOLS = {"sqlfluff", "buf"}
+# Tools that check only with a flag: without it they rewrite files in place.
+_LINT_FLAG_TOOLS = {"swiftformat": "--lint"}
 _ALL_WORDS = re.compile(r"^(?:ci|check|checks|verify|validate|all|precommit|pre-commit)(?::.*)?$", re.I)
 _TEST_WORD = re.compile(r"(?:^|[/_.:-])(?:tests?|specs?|e2e)(?:$|[/_.:-])", re.I)
 _BUILD_WORD = re.compile(r"^(?:build|compile|package|assemble|dist)(?::.*)?$", re.I)
@@ -373,6 +382,11 @@ def _segment_categories(toks: list[str]) -> set:
         if is_build:
             cats.add("build")
     if head in _LINT_TOOLS and (head != "tsc" or "--noEmit" in flags):
+        cats.add("lint")
+    if head in _LINT_SUBCOMMAND_TOOLS and args[:1] == ["lint"]:
+        cats.add("lint")
+    flag = _LINT_FLAG_TOOLS.get(head)
+    if flag and flag in flags:
         cats.add("lint")
 
     if head in _RUNNERS or head.endswith("gradlew") or head.endswith("mvnw"):
