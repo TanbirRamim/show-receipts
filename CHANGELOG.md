@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `yamllint`, `hlint`, `luacheck`, `tflint`, `sqlfluff lint`, `buf lint` and `swiftformat --lint` now count as lint runs. `sqlfluff`/`buf` only with the `lint` subcommand and `swiftformat` only with `--lint`, since their other modes rewrite or build (#18, thanks @chiragjangiir).
+
 ## 0.4.0 (2026-10-18)
 
 - Gemini CLI support: register the hook as an `AfterAgent` hook (see `examples/gemini-settings.json`). It reads Gemini's session files, both the JSONL kind and older single-JSON ones, counts `run_shell_command` runs by their exit code and `write_file`/`replace` as edits, and blocks at most `max_blocks` times per prompt even though Gemini sends the reason back as a new message (#8).
