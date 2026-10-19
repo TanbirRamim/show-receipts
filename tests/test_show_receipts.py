@@ -377,6 +377,28 @@ class CommandTests(unittest.TestCase):
         self.assertIn("lint", self.cats("npm run typecheck"))
         self.assertIn("lint", self.cats("go vet ./..."))
 
+    def test_more_linters(self):
+        for cmd in [
+            "yamllint .",
+            "hlint src",
+            "luacheck .",
+            "sqlfluff lint sql/",
+            "buf lint proto/",
+            "tflint",
+            "swiftformat --lint .",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.cats(cmd), {"lint"})
+
+    def test_lint_subcommand_and_flag_gated_tools(self):
+        # sqlfluff's other subcommands rewrite or parse, buf's build the schema:
+        # neither may prove a lint claim.
+        for cmd in ["sqlfluff fix sql/", "sqlfluff parse sql/", "buf generate", "buf build"]:
+            with self.subTest(cmd=cmd):
+                self.assertNotIn("lint", self.cats(cmd))
+        # swiftformat without --lint rewrites files, it does not check them.
+        self.assertNotIn("lint", self.cats("swiftformat ."))
+
     def test_a_ci_script_proves_everything(self):
         self.assertEqual(self.cats("npm run ci"), {"tests", "build", "lint"})
         self.assertEqual(self.cats("make check"), {"tests", "build", "lint"})
