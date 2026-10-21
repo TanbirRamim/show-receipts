@@ -642,6 +642,34 @@ class TranscriptFixtureTests(unittest.TestCase):
         )
         self.assertIn("0 would be blocked", r.stdout)
 
+    def test_cli_check_explain(self):
+        r = subprocess.run(
+            [sys.executable, str(HOOK), "check", "--explain", str(FIXTURES / "claude_pytest_proven.jsonl")],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("claims:", r.stdout)
+        self.assertIn("tests", r.stdout)
+        self.assertIn("last edit:", r.stdout)
+        self.assertIn("receipts:", r.stdout)
+        self.assertIn("verdict:     ok", r.stdout)
+
+    def test_cli_check_explain_blocked(self):
+        with tempfile.TemporaryDirectory() as d:
+            rows = _edit_before_final(_load("claude_pytest_proven.jsonl"), "src/dates.py", False)
+            p = write_jsonl(rows, d)
+            r = subprocess.run(
+                [sys.executable, str(HOOK), "check", "--explain", str(p)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("claims:", r.stdout)
+            self.assertIn("last edit:", r.stdout)
+            self.assertIn("before the last edit, ignored", r.stdout)
+            self.assertIn("verdict:     block", r.stdout)
+
 
 # --------------------------------------------------------------------------
 # the hook contract: stdin JSON in, block decision JSON out, never loop

@@ -138,6 +138,8 @@ Check one transcript by hand:
 
 ```sh
 python3 hooks/show_receipts.py check path/to/session.jsonl
+# or inspect claims, the last counted edit, and candidate commands:
+python3 hooks/show_receipts.py check --explain path/to/session.jsonl
 ```
 
 ## Contributing
