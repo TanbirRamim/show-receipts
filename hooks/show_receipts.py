@@ -58,16 +58,32 @@ CLAIM_PATTERNS: dict[str, list[str]] = {
         rf"\beverything{_FILL}\s+(?:pass(?:es|ing)?|green){_END}",
         r"\bverified\s+(?:that\s+)?(?:the\s+)?(?:fix|change|patch)\s+works\b",
         r"\bverified\s+(?:it|the\s+(?:fix|change|patch))\s+with\s+(?:the\s+)?tests\b",
+        # German
+        r"\b(?:alle\s+)?tests?\s+(?:bestehen|bestanden|laufen\s+durch|erfolgreich)\b",
+        r"\b(?:die\s+)?(?:ganze\s+|gesamte\s+)?testsuite\s+(?:besteht|ist\s+grün|lief\s+durch)\b",
+        r"\b\d+\s+(?:tests?\s+)?bestanden\b",
+        r"\b\d+\s*/\s*\d+\s+tests?\s+bestehen\b",
+        r"\b(?:keine|null|0)\s+testfehler\b",
+        r"\balles\s+(?:ist\s+)?grün\b",
+        r"\balle\s+grün\b",
+        r"\bverifiziert(?:,\s+dass)?\s+(?:der\s+)?(?:fix|patch)\s+funktioniert\b",
     ],
     "build": [
         rf"\bbuild(?:s)?{_FILL}\s+(?:{_OK}|fine|cleanly|successfully|without\s+(?:errors|warnings))\b",
         r"\bcompiles\s+(?:cleanly|successfully|fine|without\s+(?:errors|warnings))\b",
         rf"\b(?:it|code|project|crate|everything)\s+(?:now\s+)?compiles{_END}",
+        # German
+        r"\bbuild\s+(?:ist\s+)?(?:erfolgreich|sauber|grün)\b",
+        r"\b(?:kompiliert|baut)\s+(?:sauber|erfolgreich|fehlerfrei|ohne\s+fehler)\b",
+        r"\b(?:das\s+)?projekt\s+(?:kompiliert|baut)\b",
     ],
     "lint": [
         rf"\b(?:lint(?:er|ing)?|type[\s-]?checks?|typecheck(?:ing)?|clippy|ruff|eslint|mypy|pyright){_FILL}\s+(?:{_OK}|clean|cleanly|fine)\b",
         r"\b(?:no|0|zero)\s+(?:lint|type|clippy|eslint|mypy|tsc)\s+(?:errors|warnings|issues|problems)\b",
         rf"\b{_LINT_TOOL_NAMES}\s+(?:reports?\s+|shows?\s+|finds\s+)?(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
+        # German
+        r"\b(?:linter|linting|typ[\s-]?checks?)\s+(?:(?:ist|sind)\s+)?(?:sauber|erfolgreich|grün)\b",
+        r"\b(?:keine|null|0)\s+(?:lint[\s-]?|typ[\s-]?)fehler\b",
     ],
 }
 _CLAIM_RE = {k: [re.compile(p, re.I) for p in v] for k, v in CLAIM_PATTERNS.items()}
@@ -75,19 +91,33 @@ _CLAIM_RE = {k: [re.compile(p, re.I) for p in v] for k, v in CLAIM_PATTERNS.item
 # A sentence with any of these is not a confident claim about this session,
 # so we leave it alone. False positives are worse than misses.
 _HEDGE_RE = re.compile(
-    r"\b(?:not|never|cannot|can't|couldn't|didn't|don't|doesn't|won't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|"
+    r"\b(?:"
+    # English
+    r"not|never|cannot|can't|couldn't|didn't|don't|doesn't|won't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|"
     r"unable|fail(?:s|ed|ing|ure|ures)?|broken|skip(?:ped)?|"
     r"should|would|could|might|may|will|if|once|until|unless|whether|"
     r"expect(?:ed|s)?|assum\w*|hopefully|probably|likely|seems?|"
     r"make\s+sure|verify|confirm|ensure|(?:make|get|keep|turn)\s+(?:the|it|them|everything|all)|"
     r"you|your|ci|pipeline|actions|"
     r"previously|earlier|before|were|was|used\s+to|"
-    r"reports?|reported|says?|said|claims?|claimed|according)\b",
+    r"reports?|reported|says?|said|claims?|claimed|according|"
+    # German
+    r"nicht|nie|niemals|kein(?:e|en|er|es|em)?|"
+    r"kann\s+nicht|konnte\s+nicht|unfähig|fehlgeschlagen|gescheitert|scheitert|kaputt|übersprungen|"
+    r"soll|sollte|sollten|würde|würden|könnte|könnten|dürfte|dürften|wird|werden|wenn|falls|sofern|ob|sobald|bis|"
+    r"erwartet|angenommen|hoffentlich|vermutlich|wahrscheinlich|scheint|scheinen|"
+    r"sicher(?:zu)?stellen|überprüf\w*|prüf\w*|"
+    r"du|dein(?:e|en|er|es)?|ihr(?:e|en|er|es)?|sie|"
+    r"vorher|früher|zuvor|waren|war|"
+    r"berichtet|sagt|sagte|behauptet|laut"
+    r")\b",
     re.I,
 )
 # Phrases that contain a hedge word but are still clean results.
 _HEDGE_SAFE_RE = re.compile(
     r"\b(?:0|zero|no)\s+(?:test\s+)?(?:failures?|failed|failing|errors?)\b|\bfailed\s*[:=]\s*0\b"
+    r"|\b(?:0|null|keine)\s+(?:test[\s-]?)?(?:fehler|failures?)\b"
+    r"|\b(?:0|null|keine)\s+(?:lint[\s-]?|typ[\s-]?)fehler\b"
     rf"|\b{_LINT_TOOL_NAMES}\s+reports?\s+(?:no|0|zero)\s+(?:errors|warnings|issues|problems)\b",
     re.I,
 )

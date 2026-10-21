@@ -209,6 +209,52 @@ class ClaimTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIn(cat, sr.find_claims(text))
 
+    def test_german_claims_are_found(self):
+        for text, cat in [
+            ("Alle Tests bestehen.", "tests"),
+            ("Die Tests laufen durch.", "tests"),
+            ("Die gesamte Testsuite besteht.", "tests"),
+            ("42 Tests bestanden.", "tests"),
+            ("12/12 Tests bestehen.", "tests"),
+            ("Keine Testfehler.", "tests"),
+            ("Alles ist grün.", "tests"),
+            ("Alle grün.", "tests"),
+            ("Verifiziert, dass der Fix funktioniert.", "tests"),
+            ("Build ist erfolgreich.", "build"),
+            ("Kompiliert sauber.", "build"),
+            ("Das Projekt kompiliert ohne Fehler.", "build"),
+            ("Baut fehlerfrei.", "build"),
+            ("Linter ist sauber.", "lint"),
+            ("Keine Lintfehler.", "lint"),
+            ("Typchecks sind sauber.", "lint"),
+            ("Keine Typfehler.", "lint"),
+        ]:
+            with self.subTest(text=text):
+                self.assertIn(cat, sr.find_claims(text))
+
+    def test_german_hedged_or_negative_sentences_are_ignored(self):
+        for text in [
+            "Die Tests sollten bestehen.",
+            "Die Tests könnten durchlaufen.",
+            "Ich konnte die Tests nicht ausführen, also weiß ich nicht ob sie bestehen.",
+            "Falls der Build erfolgreich ist, können wir mergen.",
+            "Wenn die Tests bestehen, ist alles gut.",
+            "Sobald alle Tests grün sind.",
+            "Hoffentlich laufen die Tests durch.",
+            "Vermutlich bestehen die Tests jetzt.",
+            "Die Tests scheinen zu funktionieren.",
+            "Führe pytest aus um sicherzustellen dass die Tests bestehen.",
+            "Prüfe ob der Build erfolgreich ist.",
+            "Die Tests waren vorher grün.",
+            "Früher liefen alle Tests durch.",
+            "Laut CI bestehen die Tests.",
+            "Er berichtet dass 12 Tests bestanden haben.",
+            "Der Build ist fehlgeschlagen.",
+            "Ein Test ist gescheitert.",
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(sr.find_claims(text), {})
+
     def test_lookalikes_that_are_not_claims(self):
         for text in [
             "CI should pass now.",
