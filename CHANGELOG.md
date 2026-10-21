@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- German claim phrases and hedges, so German sessions get checked too (#24, thanks @chiragjangiir).
 - `yamllint`, `hlint`, `luacheck`, `tflint`, `sqlfluff lint`, `buf lint` and `swiftformat --lint` now count as lint runs. `sqlfluff`/`buf` only with the `lint` subcommand and `swiftformat` only with `--lint`, since their other modes rewrite or build (#18, thanks @chiragjangiir).
 
 ## 0.4.0 (2026-10-18)
