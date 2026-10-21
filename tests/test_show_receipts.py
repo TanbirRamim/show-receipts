@@ -605,6 +605,12 @@ class TranscriptFixtureTests(unittest.TestCase):
         ("codex_proven.jsonl", "/home/dev/projects/notes-app/apps/web/src/search.tsx", True),
     ]
 
+    BLOCKED_CASES: ClassVar[list] = [
+        ("claude_no_run.jsonl", "no test command ran after your last code edit"),
+        ("claude_stale_run.jsonl", "no test command ran after your last code edit"),
+        ("codex_tail_failed.jsonl", "did not pass"),
+    ]
+
     def check(self, rows):
         with tempfile.TemporaryDirectory() as d:
             p = write_jsonl(rows, d)
@@ -618,6 +624,13 @@ class TranscriptFixtureTests(unittest.TestCase):
         for name, _, _ in self.CASES:
             with self.subTest(name=name):
                 self.assertFalse(self.check(_load(name)).block)
+
+    def test_blocked_fixtures_are_blocked(self):
+        for name, expected_reason in self.BLOCKED_CASES:
+            with self.subTest(name=name):
+                v = self.check(_load(name))
+                self.assertTrue(v.block)
+                self.assertIn(expected_reason, v.reason)
 
     def test_same_claims_without_the_runs_are_blocked(self):
         for name, _, _ in self.CASES:
@@ -637,10 +650,24 @@ class TranscriptFixtureTests(unittest.TestCase):
                 [sys.executable, str(HOOK), "check", str(FIXTURES / name)], capture_output=True, text=True
             )
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for name, expected_reason in self.BLOCKED_CASES:
+            r = subprocess.run(
+                [sys.executable, str(HOOK), "check", str(FIXTURES / name)], capture_output=True, text=True
+            )
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn(expected_reason, r.stdout)
         r = subprocess.run(
-            [sys.executable, str(HOOK), "replay", *map(str, FIXTURES.glob("*.jsonl"))], capture_output=True, text=True
+            [sys.executable, str(HOOK), "replay", *[str(FIXTURES / name) for name, _, _ in self.CASES]],
+            capture_output=True,
+            text=True,
         )
         self.assertIn("0 would be blocked", r.stdout)
+        r_blocked = subprocess.run(
+            [sys.executable, str(HOOK), "replay", *[str(FIXTURES / name) for name, _ in self.BLOCKED_CASES]],
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("3 would be blocked", r_blocked.stdout)
 
 
 # --------------------------------------------------------------------------
