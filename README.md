@@ -140,6 +140,46 @@ Check one transcript by hand:
 python3 hooks/show_receipts.py check path/to/session.jsonl
 ```
 
+### Auditing past sessions
+
+To audit past sessions in CI, a nightly cron job, or before enabling the hook:
+
+```sh
+python3 hooks/show_receipts.py replay ~/.claude/projects/*/*.jsonl
+```
+
+Or over the repository fixtures:
+
+```sh
+python3 hooks/show_receipts.py replay tests/fixtures/*.jsonl
+```
+
+`replay` walks each transcript, evaluates every finished turn, and prints the block reason for any turn that had an unproven claim. At the end, it prints a summary:
+
+```
+4 turns, 4 with pass claims, 0 would be blocked
+```
+
+- **turns**: total assistant turns analyzed.
+- **with pass claims**: turns where the agent made a confident claim that tests, builds, or linters pass.
+- **would be blocked**: turns where no matching proof ran after the last code edit, or the check failed.
+
+## Why did it block me?
+
+If the hook blocked a stop and you think it shouldn't have:
+
+1. **The check ran before the last code edit.** A receipt must come *after* the last code modification. If the agent ran the test, then edited a file, the clock reset and the test needs to run again. (Doc edits, notes, and files outside the project do not reset the clock.)
+2. **Piping through a command that hides exit codes.** Piping a failing check through `tail`, `grep`, or `cat` in bash returns the pipe's exit code unless `set -o pipefail` is active. While show-receipts inspects output for known failure patterns (like `1 failed`), clean test runners without pipes provide the most reliable receipts.
+3. **Custom runner or command.** If your project uses an unusual runner script (e.g. `./run-tests` or `make check-fast`), add it to `extra_commands` in `~/.config/show-receipts/config.json`:
+   ```json
+   {
+     "extra_commands": {
+       "tests": ["^\\./run-tests"]
+     }
+   }
+   ```
+4. **Debugging hook execution.** Set `SHOW_RECEIPTS_DEBUG=1` in your environment to print errors to stderr instead of letting the hook silently allow.
+
 ## Contributing
 
 False-positive reports are the most useful thing you can send. See [CONTRIBUTING.md](CONTRIBUTING.md), there's a script that turns a turn from your own transcript into a scrubbed test fixture.
