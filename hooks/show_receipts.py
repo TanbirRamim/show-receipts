@@ -1127,7 +1127,9 @@ def _cli(argv: list[str]) -> int:
         ap.print_help()
         return 2
     tr = parse_transcript(Path(args.transcript))
-    msg = args.message if args.message is not None else (tr.last_assistant_text or (tr.stops[-1][1] if tr.stops else ""))
+    msg = (
+        args.message if args.message is not None else (tr.last_assistant_text or (tr.stops[-1][1] if tr.stops else ""))
+    )
     v = evaluate(tr, msg, load_config(args.cwd or tr.cwd or "."), args.cwd)
     print(v.reason if v.block else "ok: no unproven claims")
     return 1 if v.block else 0
