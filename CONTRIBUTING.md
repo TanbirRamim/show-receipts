@@ -16,7 +16,7 @@ A false block is worse than a missed one. If a change makes the hook block in a 
 
 ## False positive or missed claim?
 
-Best report: the final message plus the commands that ran. Even better, a fixture. `scripts/make_fixture.py` cuts one turn out of your own transcript and scrubs it:
+Best report: the final message plus the commands that ran (or `python3 hooks/show_receipts.py check --explain <session.jsonl>`). Even better, a fixture. `scripts/make_fixture.py` cuts one turn out of your own transcript and scrubs it:
 
 ```sh
 python3 scripts/make_fixture.py ~/.claude/projects/<project>/<session>.jsonl <turn> tests/fixtures/my_case.jsonl --scrub yourname yourcompany

@@ -853,6 +853,39 @@ class Verdict:
     missing: dict[str, str] = field(default_factory=dict)  # category -> claim sentence
     failed: dict[str, str] = field(default_factory=dict)  # category -> failing command
     reason: str = ""
+    claims: dict[str, str] = field(default_factory=dict)
+    last_edit: tuple[int, str] | None = None
+    receipts: list[dict] = field(default_factory=list)
+
+    def explain(self) -> str:
+        lines: list[str] = []
+        if self.claims:
+            for i, (cat, sent) in enumerate(self.claims.items()):
+                label = "claims:" if i == 0 else ""
+                lines.append(f'{label:<13}{cat:<7} "{_clip(sent, 80)}"')
+        else:
+            lines.append(f"{'claims:':<13}none")
+
+        if self.last_edit:
+            ev_num, path = self.last_edit
+            lines.append(f"{'last edit:':<13}Edit {path}  (event {ev_num})")
+        else:
+            lines.append(f"{'last edit:':<13}none")
+
+        if self.receipts:
+            for i, r in enumerate(self.receipts):
+                label = "receipts:" if i == 0 else ""
+                cmd = _clip(r["command"], 60)
+                status = r["status"]
+                ev_num = r["event"]
+                note = f", {r['note']}" if r.get("note") else ""
+                lines.append(f"{label:<13}{cmd}  {status}  (event {ev_num}{note})")
+        else:
+            lines.append(f"{'receipts:':<13}none")
+
+        verdict_str = "block" if self.block else "ok"
+        lines.append(f"{'verdict:':<13}{verdict_str}")
+        return "\n".join(lines)
 
 
 def _project_relative(p: str, cwd: str) -> str:
@@ -887,19 +920,69 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
     cfg = config or {}
     cats = [c for c in cfg.get("claims", CATEGORIES) if c in CATEGORIES]
     claims = find_claims(message, cats)
-    if not claims:
-        return Verdict(False)
     cwd = cwd or tr.cwd
     ignore = list(cfg.get("ignore_paths", []))
     extra = cfg.get("extra_commands") or {}
 
     last_edit = -1
+    last_edit_path = ""
     for i, ev in enumerate(tr.events):
         if ev.kind == "edit" and _counts_as_edit(ev.path, cwd, ignore, cfg.get("project_ignore_dirs", [])):
             last_edit = i
+            last_edit_path = ev.path
+
+    last_edit_info = None
+    if last_edit >= 0:
+        rel = _project_relative(last_edit_path, cwd) if cwd else ""
+        last_edit_info = (last_edit + 1, rel or last_edit_path)
+
+    relevant_cats = set(claims.keys()) if claims else set(CATEGORIES)
+    receipts: list[dict] = []
+    for i, ev in enumerate(tr.events):
+        if ev.kind != "cmd":
+            continue
+        cmd_cats = command_categories(ev.command, extra)
+        if not (relevant_cats & set(cmd_cats)):
+            continue
+        ok = ev.ok
+        fail_out = "tests" in cmd_cats and _TEST_FAIL_OUTPUT.search(ev.output or "")
+        if ok and fail_out:
+            ok = False
+        elif not ok and not fail_out and len([x for x in _SPLIT_RE.split(ev.command) if x.strip()]) > 1:
+            ok = None
+
+        if ok is True:
+            status = "exit 0"
+        elif ok is False:
+            status = "failed"
+        else:
+            status = "unknown"
+
+        if i <= last_edit:
+            note = "before the last edit, ignored"
+        elif ok is True:
+            note = "counted"
+        elif ok is False:
+            note = "failed"
+        else:
+            note = "unknown exit status"
+
+        receipts.append(
+            {
+                "command": ev.command,
+                "status": status,
+                "event": i + 1,
+                "counted": (i > last_edit and ok is True),
+                "note": note,
+            }
+        )
+
+    if not claims:
+        return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)
     after = tr.events[last_edit + 1 :]
     if any(ev.kind == "delegate" for ev in after):
-        return Verdict(False)  # a subagent may have run them; we can't see its log
+        # a subagent may have run them; we can't see its log
+        return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)
 
     missing: dict[str, str] = {}
     failed: dict[str, str] = {}
@@ -929,8 +1012,16 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
         elif state == "failed":
             failed[cat] = fail_cmd
     if not missing and not failed:
-        return Verdict(False)
-    return Verdict(True, missing, failed, _reason(missing, failed, last_edit >= 0))
+        return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)
+    return Verdict(
+        True,
+        missing,
+        failed,
+        _reason(missing, failed, last_edit >= 0),
+        claims=claims,
+        last_edit=last_edit_info,
+        receipts=receipts,
+    )
 
 
 _NOUN = {"tests": "test", "build": "build", "lint": "lint or typecheck"}
@@ -1146,6 +1237,11 @@ def _cli(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd")
     c = sub.add_parser("check", help="check a transcript file by hand")
     c.add_argument("transcript")
+    c.add_argument(
+        "--explain",
+        action="store_true",
+        help="show which claims, edits and commands the verdict was based on",
+    )
     c.add_argument("--message", help="final message to check (default: last one in the transcript)")
     c.add_argument("--cwd", default="")
     rp = sub.add_parser("replay", help="replay past transcripts and show every stop that would be blocked")
@@ -1161,7 +1257,10 @@ def _cli(argv: list[str]) -> int:
         args.message if args.message is not None else (tr.last_assistant_text or (tr.stops[-1][1] if tr.stops else ""))
     )
     v = evaluate(tr, msg, load_config(args.cwd or tr.cwd or "."), args.cwd)
-    print(v.reason if v.block else "ok: no unproven claims")
+    if args.explain:
+        print(v.explain())
+    else:
+        print(v.reason if v.block else "ok: no unproven claims")
     return 1 if v.block else 0
 
 
