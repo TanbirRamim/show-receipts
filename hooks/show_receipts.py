@@ -834,13 +834,13 @@ class Verdict:
                 label = "claims:" if i == 0 else ""
                 lines.append(f'{label:<13}{cat:<7} "{_clip(sent, 80)}"')
         else:
-            lines.append(f'{"claims:":<13}none')
+            lines.append(f"{'claims:':<13}none")
 
         if self.last_edit:
             ev_num, path = self.last_edit
-            lines.append(f'{"last edit:":<13}Edit {path}  (event {ev_num})')
+            lines.append(f"{'last edit:':<13}Edit {path}  (event {ev_num})")
         else:
-            lines.append(f'{"last edit:":<13}none')
+            lines.append(f"{'last edit:':<13}none")
 
         if self.receipts:
             for i, r in enumerate(self.receipts):
@@ -849,12 +849,12 @@ class Verdict:
                 status = r["status"]
                 ev_num = r["event"]
                 note = f", {r['note']}" if r.get("note") else ""
-                lines.append(f'{label:<13}{cmd}  {status}  (event {ev_num}{note})')
+                lines.append(f"{label:<13}{cmd}  {status}  (event {ev_num}{note})")
         else:
-            lines.append(f'{"receipts:":<13}none')
+            lines.append(f"{'receipts:':<13}none")
 
         verdict_str = "block" if self.block else "ok"
-        lines.append(f'{"verdict:":<13}{verdict_str}')
+        lines.append(f"{'verdict:':<13}{verdict_str}")
         return "\n".join(lines)
 
 
@@ -937,13 +937,15 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
         else:
             note = "unknown exit status"
 
-        receipts.append({
-            "command": ev.command,
-            "status": status,
-            "event": i + 1,
-            "counted": (i > last_edit and ok is True),
-            "note": note,
-        })
+        receipts.append(
+            {
+                "command": ev.command,
+                "status": status,
+                "event": i + 1,
+                "counted": (i > last_edit and ok is True),
+                "note": note,
+            }
+        )
 
     if not claims:
         return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)
