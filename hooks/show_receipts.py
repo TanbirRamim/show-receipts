@@ -495,6 +495,7 @@ class Event:
     ok: bool | None = None  # None means unknown (still running, backgrounded)
     output: str = ""
     path: str = ""
+    tool: str = ""  # the edit tool, for --explain
 
 
 @dataclass
@@ -689,7 +690,7 @@ def _parse_gemini(objs: list[dict], tr: Transcript) -> None:
                     ok = code is None or int(code.group(1)) == 0
                 tr.events.append(Event("cmd", command=str(args.get("command") or ""), ok=ok, output=out[-4000:]))
             elif name in _GEMINI_EDIT and status not in ("error", "cancelled"):
-                tr.events.append(Event("edit", path=str(args.get("file_path") or "")))
+                tr.events.append(Event("edit", path=str(args.get("file_path") or ""), tool=name))
             elif name in _GEMINI_DELEGATE:
                 tr.events.append(Event("delegate"))
         text = _gemini_text(m.get("content"))
@@ -754,7 +755,11 @@ def _parse_claude(obj: dict, tr: Transcript, pending: dict[str, Event]) -> None:
                 pending[b.get("id", "")] = ev
             elif name in _EDIT_TOOLS and isinstance(inp, dict):
                 tr.events.append(
-                    Event("edit", path=str(inp.get("file_path") or inp.get("notebook_path") or inp.get("path") or ""))
+                    Event(
+                        "edit",
+                        path=str(inp.get("file_path") or inp.get("notebook_path") or inp.get("path") or ""),
+                        tool=name,
+                    )
                 )
             elif name in _DELEGATE_TOOLS:
                 tr.events.append(Event("delegate"))
@@ -769,7 +774,7 @@ def _bash_edits(tr: Transcript, ev: Event, res: dict) -> None:
     heads = {os.path.basename((_tokens(seg) or [""])[0]) for seg in _SPLIT_RE.split(ev.command)}
     if res.get("gitOperation") or heads & {"git", "gh"}:
         return  # checkouts, merges and pulls change files, but that isn't new code to test
-    edits = [Event("edit", path=str(f.get("filePath", ""))) for f in files if isinstance(f, dict)]
+    edits = [Event("edit", path=str(f.get("filePath", "")), tool="Bash") for f in files if isinstance(f, dict)]
     try:
         i = tr.events.index(ev)
     except ValueError:
@@ -807,7 +812,7 @@ def _parse_codex(obj: dict, tr: Transcript, pending: dict[str, Event]) -> None:
                 )
             elif kind == "FileChange" and it.get("status") != "failed":
                 for path in it.get("changes") or {}:
-                    tr.events.append(Event("edit", path=str(path)))
+                    tr.events.append(Event("edit", path=str(path), tool="apply_patch"))
             elif kind == "AgentMessage":
                 text = _text_of([{"text": c.get("text")} for c in it.get("content") or [] if isinstance(c, dict)])
                 if text:
@@ -818,7 +823,7 @@ def _parse_codex(obj: dict, tr: Transcript, pending: dict[str, Event]) -> None:
         if p.get("type") in ("custom_tool_call", "function_call") and p.get("name") == "apply_patch":
             body = p.get("input") or p.get("arguments") or ""
             for path in _PATCH_FILE.findall(str(body)):
-                tr.events.append(Event("edit", path=path.strip()))
+                tr.events.append(Event("edit", path=path.strip(), tool="apply_patch"))
         elif p.get("type") == "function_call" and p.get("name") in ("shell", "local_shell"):
             # Older Codex: commands as function calls; output arrives separately.
             try:
@@ -854,7 +859,7 @@ class Verdict:
     failed: dict[str, str] = field(default_factory=dict)  # category -> failing command
     reason: str = ""
     claims: dict[str, str] = field(default_factory=dict)
-    last_edit: tuple[int, str] | None = None
+    last_edit: tuple[int, str, str] | None = None  # (event, tool, path)
     receipts: list[dict] = field(default_factory=list)
 
     def explain(self) -> str:
@@ -867,8 +872,8 @@ class Verdict:
             lines.append(f"{'claims:':<13}none")
 
         if self.last_edit:
-            ev_num, path = self.last_edit
-            lines.append(f"{'last edit:':<13}Edit {path}  (event {ev_num})")
+            ev_num, tool, path = self.last_edit
+            lines.append(f"{'last edit:':<13}{tool or 'edit'} {path}  (event {ev_num})")
         else:
             lines.append(f"{'last edit:':<13}none")
 
@@ -916,6 +921,19 @@ def _counts_as_edit(path: str, cwd: str, ignore: list[str], project_dirs: Iterab
     return True
 
 
+def _effective_ok(ev: Event, cmd_cats: list[str]) -> bool | None:
+    """A command's result as the verdict sees it: failing test output beats exit 0,
+    and a compound command that failed may have failed outside the check."""
+    if ev.ok is None:
+        return None
+    fail_out = "tests" in cmd_cats and _TEST_FAIL_OUTPUT.search(ev.output or "")
+    if ev.ok and fail_out:
+        return False
+    if not ev.ok and not fail_out and len([x for x in _SPLIT_RE.split(ev.command) if x.strip()]) > 1:
+        return None
+    return ev.ok
+
+
 def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str = "") -> Verdict:
     cfg = config or {}
     cats = [c for c in cfg.get("claims", CATEGORIES) if c in CATEGORIES]
@@ -925,16 +943,16 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
     extra = cfg.get("extra_commands") or {}
 
     last_edit = -1
-    last_edit_path = ""
+    last_edit_path = last_edit_tool = ""
     for i, ev in enumerate(tr.events):
         if ev.kind == "edit" and _counts_as_edit(ev.path, cwd, ignore, cfg.get("project_ignore_dirs", [])):
             last_edit = i
-            last_edit_path = ev.path
+            last_edit_path, last_edit_tool = ev.path, ev.tool
 
     last_edit_info = None
     if last_edit >= 0:
         rel = _project_relative(last_edit_path, cwd) if cwd else ""
-        last_edit_info = (last_edit + 1, rel or last_edit_path)
+        last_edit_info = (last_edit + 1, last_edit_tool, rel or last_edit_path)
 
     relevant_cats = set(claims.keys()) if claims else set(CATEGORIES)
     receipts: list[dict] = []
@@ -944,13 +962,7 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
         cmd_cats = command_categories(ev.command, extra)
         if not (relevant_cats & set(cmd_cats)):
             continue
-        ok = ev.ok
-        fail_out = "tests" in cmd_cats and _TEST_FAIL_OUTPUT.search(ev.output or "")
-        if ok and fail_out:
-            ok = False
-        elif not ok and not fail_out and len([x for x in _SPLIT_RE.split(ev.command) if x.strip()]) > 1:
-            ok = None
-
+        ok = _effective_ok(ev, cmd_cats)
         if ok is True:
             status = "exit 0"
         elif ok is False:
@@ -974,6 +986,9 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
                 "event": i + 1,
                 "counted": (i > last_edit and ok is True),
                 "note": note,
+                "ok": ok,
+                "categories": cmd_cats,
+                "after_edit": i > last_edit,
             }
         )
 
@@ -989,24 +1004,17 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
     for cat, sentence in claims.items():
         state = "none"  # none | ok | unknown | failed
         fail_cmd = ""
-        for ev in after:
-            if ev.kind != "cmd" or cat not in command_categories(ev.command, extra):
+        # same receipts --explain prints, so the two can't disagree
+        for r in receipts:
+            if not r["after_edit"] or cat not in r["categories"]:
                 continue
-            if ev.ok is None:
-                state = "unknown" if state != "ok" else state
-                continue
-            ok = ev.ok
-            fail_out = "tests" in command_categories(ev.command, extra) and _TEST_FAIL_OUTPUT.search(ev.output or "")
-            if ok and fail_out:
-                ok = False
-            elif not ok and not fail_out and len([x for x in _SPLIT_RE.split(ev.command) if x.strip()]) > 1:
-                ok = None  # a compound command can fail in a step that isn't the check
+            ok = r["ok"]
             if ok:
                 state = "ok"  # one green run after the last edit is enough
             elif ok is None:
                 state = "unknown" if state != "ok" else state
             elif state != "ok":
-                state, fail_cmd = "failed", ev.command
+                state, fail_cmd = "failed", r["command"]
         if state == "none":
             missing[cat] = sentence
         elif state == "failed":

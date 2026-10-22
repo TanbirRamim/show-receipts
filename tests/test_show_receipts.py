@@ -728,6 +728,26 @@ class TranscriptFixtureTests(unittest.TestCase):
         self.assertIn("receipts:", r.stdout)
         self.assertIn("verdict:     ok", r.stdout)
 
+    def test_explain_names_the_edit_tool(self):
+        for tool in ("Write", "MultiEdit", "write_file", "apply_patch"):
+            tr = sr.Transcript(events=[sr.Event("edit", path="src/a.py", tool=tool)])
+            v = sr.evaluate(tr, "Done, all tests pass.")
+            self.assertEqual(v.last_edit, (1, tool, "src/a.py"))
+            self.assertIn(f"last edit:   {tool} src/a.py  (event 1)", v.explain())
+
+    def test_explain_receipts_match_verdict(self):
+        cases = [
+            (sr.Event("cmd", command="pytest", ok=True), "exit 0", False),
+            (sr.Event("cmd", command="pytest", ok=True, output="1 failed, 3 passed"), "failed", True),
+            (sr.Event("cmd", command="cd x && pytest", ok=False), "unknown", False),
+            (sr.Event("cmd", command="pytest", ok=None), "unknown", False),
+        ]
+        for cmd, status, block in cases:
+            tr = sr.Transcript(events=[sr.Event("edit", path="src/a.py", tool="Edit"), cmd])
+            v = sr.evaluate(tr, "Done, all tests pass.")
+            self.assertEqual(v.receipts[0]["status"], status, cmd)
+            self.assertEqual(v.block, block, cmd)
+
     def test_cli_check_explain_blocked(self):
         with tempfile.TemporaryDirectory() as d:
             rows = _edit_before_final(_load("claude_pytest_proven.jsonl"), "src/dates.py", False)
