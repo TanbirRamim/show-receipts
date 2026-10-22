@@ -949,7 +949,8 @@ def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str 
         return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)
     after = tr.events[last_edit + 1 :]
     if any(ev.kind == "delegate" for ev in after):
-        return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)  # a subagent may have run them; we can't see its log
+        # a subagent may have run them; we can't see its log
+        return Verdict(False, claims=claims, last_edit=last_edit_info, receipts=receipts)
 
     missing: dict[str, str] = {}
     failed: dict[str, str] = {}
@@ -1204,7 +1205,11 @@ def _cli(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd")
     c = sub.add_parser("check", help="check a transcript file by hand")
     c.add_argument("transcript")
-    c.add_argument("--explain", action="store_true", help="show which claims, edits and commands the verdict was based on")
+    c.add_argument(
+        "--explain",
+        action="store_true",
+        help="show which claims, edits and commands the verdict was based on",
+    )
     c.add_argument("--message", help="final message to check (default: last one in the transcript)")
     c.add_argument("--cwd", default="")
     rp = sub.add_parser("replay", help="replay past transcripts and show every stop that would be blocked")
