@@ -463,6 +463,13 @@ class CommandTests(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.cats(cmd), set())
 
+    def test_missing_transcript_is_a_clean_error(self):
+        for cmd in ("check", "replay"):
+            r = subprocess.run([sys.executable, str(HOOK), cmd, "/no/such/file.jsonl"], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2, cmd)
+            self.assertIn("not a transcript file", r.stderr)
+            self.assertNotIn("Traceback", r.stderr)
+
     def test_extra_commands_from_config(self):
         self.assertIn("tests", sr.command_categories("./acme verify-all", {"tests": [r"acme verify-all"]}))
 
@@ -602,6 +609,20 @@ class VerdictTests(unittest.TestCase):
         self.assertFalse(verdict(rows, config={"ignore_paths": ["/gen/"]}).block)
         self.assertFalse(verdict(rows, config={"project_ignore_dirs": ["gen"]}).block)
         self.assertTrue(verdict(rows, config={"project_ignore_dirs": ["ge"]}).block)
+
+    def test_config_typos_dont_switch_the_check_off(self):
+        edited = [user("x"), edit(), bash("pytest", True, "1 passed"), edit("/repo/app.py"), say("Tests pass.")]
+        # A bare string is one pattern, not one regex per character.
+        self.assertTrue(verdict(edited, config={"ignore_paths": "generated"}).block)
+        self.assertFalse(verdict(edited, config={"ignore_paths": "/app"}).block)
+        # A broken regex is skipped, the rest still apply.
+        self.assertTrue(verdict(edited, config={"ignore_paths": ["[oops"]}).block)
+        self.assertFalse(verdict(edited, config={"ignore_paths": ["[oops", "/app"]}).block)
+        unproven = [user("x"), edit(), bash("ls", True, ""), say("Tests pass.")]
+        self.assertTrue(verdict(unproven, config={"extra_commands": {"tests": "^\\./acme"}}).block)
+        self.assertTrue(verdict(unproven, config={"extra_commands": {"tests": ["(unclosed"]}}).block)
+        self.assertTrue(verdict(unproven, config={"extra_commands": ["oops"]}).block)
+        self.assertTrue(verdict(unproven, config={"claims": "tests"}).block)
 
 
 # --------------------------------------------------------------------------
