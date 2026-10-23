@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-10-23)
 
 - `check --explain` prints the claims it found, the last edit and which tool made it, each test/build/lint run with its status, and the verdict, so you can see why a session was blocked or let through. It reads the same receipts the verdict uses (#20, thanks @chiragjangiir).
 - German claim phrases and hedges, so German sessions get checked too (#24, thanks @chiragjangiir).
 - `yamllint`, `hlint`, `luacheck`, `tflint`, `sqlfluff lint`, `buf lint` and `swiftformat --lint` now count as lint runs. `sqlfluff`/`buf` only with the `lint` subcommand and `swiftformat` only with `--lint`, since their other modes rewrite or build (#18, thanks @chiragjangiir).
+- Transcript fixtures for blocked cases, so the tests cover real sessions that should be stopped (#22, thanks @chiragjangiir).
+- Docs on auditing a session with `replay`, plus a troubleshooting section (#21, thanks @chiragjangiir).
 
 ## 0.4.0 (2026-10-18)
 
