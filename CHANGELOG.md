@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Gemini CLI: a `run_shell_command` exit code is now read only from the trailer the CLI adds after the output. Before, a command that printed `Exit Code: 1` itself (or a run that failed after printing `Exit Code: 0`) got the wrong status. Also a real-schema fixture covering `$patch` results, re-appended messages and `$rewindTo`.
+
 ## 0.5.0 (2026-10-23)
 
 - `check --explain` prints the claims it found, the last edit and which tool made it, each test/build/lint run with its status, and the verdict, so you can see why a session was blocked or let through. It reads the same receipts the verdict uses (#20, thanks @chiragjangiir).
