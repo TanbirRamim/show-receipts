@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Config typos no longer switch the check off. A bare string in `ignore_paths` or `extra_commands` was read one character per regex (so `"generated"` ignored almost every edit), and a regex that didn't compile crashed the hook, which then allowed every stop. Now a string is one pattern and a bad regex is skipped (printed with `SHOW_RECEIPTS_DEBUG=1`). A non-number `max_blocks` falls back to 1.
+- `check` and `replay` print a short error for a missing transcript instead of a traceback.
+
 ## 0.5.1 (2026-10-23)
 
 - Gemini CLI: a `run_shell_command` exit code is now read only from the trailer the CLI adds after the output. Before, a command that printed `Exit Code: 1` itself (or a run that failed after printing `Exit Code: 0`) got the wrong status. Also a real-schema fixture covering `$patch` results, re-appended messages and `$rewindTo`.

@@ -956,13 +956,39 @@ def _effective_ok(ev: Event, cmd_cats: list[str]) -> bool | None:
     return ev.ok
 
 
+def _patterns(value: object) -> list[str]:
+    """Regexes from the user's config. A bare string is one pattern (not one per
+    character, which would match nearly everything), and a pattern that doesn't
+    compile is dropped instead of crashing the hook and silently allowing."""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    out = []
+    for p in value:
+        if not isinstance(p, str):
+            continue
+        try:
+            re.compile(p)
+        except re.error as exc:
+            if os.environ.get("SHOW_RECEIPTS_DEBUG"):
+                print(f"show-receipts: skipping bad regex {p!r}: {exc}", file=sys.stderr)
+            continue
+        out.append(p)
+    return out
+
+
 def evaluate(tr: Transcript, message: str, config: dict | None = None, cwd: str = "") -> Verdict:
     cfg = config or {}
-    cats = [c for c in cfg.get("claims", CATEGORIES) if c in CATEGORIES]
+    claim_cfg = cfg.get("claims", CATEGORIES)
+    if isinstance(claim_cfg, str):
+        claim_cfg = [claim_cfg]
+    cats = [c for c in claim_cfg if c in CATEGORIES] if isinstance(claim_cfg, list) else list(CATEGORIES)
     claims = find_claims(message, cats)
     cwd = cwd or tr.cwd
-    ignore = list(cfg.get("ignore_paths", []))
-    extra = cfg.get("extra_commands") or {}
+    ignore = _patterns(cfg.get("ignore_paths", []))
+    raw_extra = cfg.get("extra_commands")
+    extra = {k: _patterns(v) for k, v in raw_extra.items()} if isinstance(raw_extra, dict) else {}
 
     last_edit = -1
     last_edit_path = last_edit_tool = ""
@@ -1246,7 +1272,10 @@ def run_hook(payload: dict) -> dict | None:
         # prompt (client.ts, stopHookActive=true), so keep counting on the
         # turn we blocked rather than starting over.
         turn = _recorded_turn(session) or turn
-    max_blocks = int(cfg.get("max_blocks", 1))
+    try:
+        max_blocks = int(cfg.get("max_blocks", 1))
+    except (TypeError, ValueError):
+        max_blocks = 1
     so_far = _blocks_so_far(session, turn) if session and turn else None
     if so_far is None:
         if payload.get("stop_hook_active"):
@@ -1277,6 +1306,10 @@ def _cli(argv: list[str]) -> int:
     rp = sub.add_parser("replay", help="replay past transcripts and show every stop that would be blocked")
     rp.add_argument("transcripts", nargs="+")
     args = ap.parse_args(argv)
+    for p in [args.transcript] if args.cmd == "check" else getattr(args, "transcripts", []):
+        if not Path(p).is_file():
+            print(f"show-receipts: not a transcript file: {p}", file=sys.stderr)
+            return 2
     if args.cmd == "replay":
         return _replay(args.transcripts)
     if args.cmd != "check":
