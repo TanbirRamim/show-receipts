@@ -1,6 +1,6 @@
 # show-receipts
 
-Your agent says the tests pass. show-receipts makes it prove it.
+Your agent says the tests pass. show-receipts makes it prove it. Works with Claude Code, Codex and Gemini CLI.
 
 [![CI](https://github.com/TanbirRamim/show-receipts/actions/workflows/ci.yml/badge.svg)](https://github.com/TanbirRamim/show-receipts/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-111111)](LICENSE)
 
@@ -14,6 +14,8 @@ In Claude Code:
 Or from your shell: `claude plugin marketplace add TanbirRamim/show-receipts && claude plugin install show-receipts@show-receipts`. The hook applies from your next session. Codex, Gemini CLI and manual setups are [below](#other-ways-to-install).
 
 ![A real Claude Code run: the agent says "All tests pass." without running anything, show-receipts blocks the stop, and the agent admits it never ran the tests](assets/demo.svg)
+
+Replayed over 782 real turns from my own Claude Code and Codex history: 41 ended with a pass claim, all 41 were backed by a run, 0 false blocks. [Details](#false-positives).
 
 ## What it does
 
@@ -187,3 +189,7 @@ If the hook blocked a stop and you think it shouldn't have:
 False-positive reports are the most useful thing you can send. See [CONTRIBUTING.md](CONTRIBUTING.md), there's a script that turns a turn from your own transcript into a scrubbed test fixture.
 
 MIT license.
+
+## Also by me
+
+[skill-trigger-bench](https://github.com/TanbirRamim/skill-trigger-bench) finds which of your skills Claude never uses. [Open Source Radar](https://github.com/TanbirRamim/open-source-radar) is an index of open issues worth picking up.
