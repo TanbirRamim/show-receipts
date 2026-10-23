@@ -28,7 +28,7 @@ try:
 except ImportError:  # Windows
     pwd = None
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 CONFIG_NAME = ".show-receipts.json"
 CATEGORIES = ("tests", "build", "lint")
