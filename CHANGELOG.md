@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-10-23)
 
 - Gemini CLI: a `run_shell_command` exit code is now read only from the trailer the CLI adds after the output. Before, a command that printed `Exit Code: 1` itself (or a run that failed after printing `Exit Code: 0`) got the wrong status. Also a real-schema fixture covering `$patch` results, re-appended messages and `$rewindTo`.
 
