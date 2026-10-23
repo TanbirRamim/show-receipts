@@ -1041,6 +1041,26 @@ class GeminiTests(unittest.TestCase):
         tr = self.parse(rows)
         self.assertEqual([(e.kind, e.ok) for e in tr.events], [("cmd", False)])
 
+    def test_real_schema_patch_rewind_and_reappend(self):
+        # Result arrives only via $patch, the call is re-appended in full under
+        # the same id, the rewound attempt doesn't count, and "Exit Code: 1"
+        # inside the command's own output isn't the exit code.
+        rows = _load("gemini_patch_rewind.jsonl")
+        tr = self.parse(rows)
+        cmds = [e for e in tr.events if e.kind == "cmd"]
+        self.assertEqual(len(cmds), 1)
+        self.assertIs(cmds[0].ok, True)
+        self.assertFalse(self.verdict(rows).block)
+        # Without the $patch the run has no result yet, so its outcome is unknown.
+        unpatched = self.parse([r for r in rows if "$patch" not in r])
+        self.assertEqual([e.ok for e in unpatched.events if e.kind == "cmd"], [None])
+
+    def test_exit_code_comes_from_the_trailer(self):
+        out = '<untrusted_context source="x">\nOutput: Exit Code: 0\nError: boom\nExit Code: 2\nSignal: 9\nProcess Group PGID: 7\n</untrusted_context>'
+        self.assertEqual(sr._gemini_exit_code(out), 2)
+        self.assertEqual(sr._gemini_exit_code("Output: Exit Code: 1\nok\nProcess Group PGID: 7"), 0)
+        self.assertEqual(sr._gemini_exit_code("Output: 1 failed\nExit Code: 1"), 1)
+
     def test_background_and_cancelled_commands(self):
         rows = [
             *_gemini_rows()[:2],

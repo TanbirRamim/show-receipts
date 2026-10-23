@@ -591,7 +591,31 @@ def _read_whole_json(path: Path) -> list[dict]:
 _GEMINI_SHELL = {"run_shell_command"}
 _GEMINI_EDIT = {"write_file", "replace"}
 _GEMINI_DELEGATE = {"invoke_agent"}
-_GEMINI_EXIT = re.compile(r"^Exit Code: (-?\d+)$", re.M)
+_GEMINI_EXIT = re.compile(r"Exit Code: (-?\d+)")
+# shell.ts builds "Output: <raw>" then optional "Error: ...", "Exit Code: N" (only
+# when N != 0), "Signal: ...", "Background PIDs: ...", "Process Group PGID: N",
+# wrapped in <untrusted_context>. Only those trailer lines say how it exited;
+# "Exit Code: 1" printed by the command itself is just output.
+_GEMINI_TRAILER = ("Signal: ", "Background PIDs: ", "Process Group PGID: ")
+
+
+def _gemini_exit_code(out: str) -> int:
+    for line in reversed(out.rstrip().splitlines()):
+        line = line.strip()
+        if not line or line.startswith("</untrusted_context"):
+            continue
+        if line.startswith(_GEMINI_TRAILER):
+            continue
+        m = _GEMINI_EXIT.fullmatch(line)
+        return int(m.group(1)) if m else 0
+    return 0
+
+
+def _gemini_unwrap(out: str) -> str:
+    out = out.strip()
+    if out.startswith("<untrusted_context"):
+        out = out.split("\n", 1)[1] if "\n" in out else ""
+    return out
 
 
 def _is_gemini(obj: dict) -> bool:
@@ -678,16 +702,14 @@ def _parse_gemini(objs: list[dict], tr: Transcript) -> None:
             if name in _GEMINI_SHELL:
                 out = _gemini_text(tc.get("result"))
                 ok: bool | None
-                if args.get("is_background") or "Command moved to background" in out:
+                if args.get("is_background") or _gemini_unwrap(out).startswith("Command moved to background"):
                     ok = None
                 elif status in ("error", "cancelled"):
                     ok = False
                 elif status != "success" or tc.get("result") is None:
                     ok = None
                 else:
-                    # shell.ts only adds "Exit Code: N" to the output when N != 0.
-                    code = _GEMINI_EXIT.search(out)
-                    ok = code is None or int(code.group(1)) == 0
+                    ok = _gemini_exit_code(out) == 0
                 tr.events.append(Event("cmd", command=str(args.get("command") or ""), ok=ok, output=out[-4000:]))
             elif name in _GEMINI_EDIT and status not in ("error", "cancelled"):
                 tr.events.append(Event("edit", path=str(args.get("file_path") or ""), tool=name))
