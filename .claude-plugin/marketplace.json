@@ -12,7 +12,7 @@
       "source": "./",
       "description": "Stop hook that blocks unproven \"tests pass\", \"build succeeds\" and \"lint is clean\" claims.",
       "category": "development",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "homepage": "https://github.com/TanbirRamim/show-receipts"
     }
   ]
