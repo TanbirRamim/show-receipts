@@ -421,9 +421,11 @@ def _segment_categories(toks: list[str]) -> set:
         cats.add("lint")
     # Terraform plan/apply and the default fmt command aren't lint receipts.
     # 'fmt' only checks formatting when -check is explicitly supplied.
-    if head == "terraform":
-        if args[:1] == ["validate"] or (args[:1] == ["fmt"] and "-check" in flags):
-            cats.add("lint")
+    if head == "terraform" and (args[:1] == ["validate"] or (args[:1] == ["fmt"] and "-check" in flags)):
+        cats.add("lint")
+    # Same for dart format: it only checks when told to fail on changes.
+    if head == "dart" and args[:1] == ["format"] and "--set-exit-if-changed" in flags:
+        cats.add("lint")
     flag = _LINT_FLAG_TOOLS.get(head)
     if flag and flag in flags:
         cats.add("lint")

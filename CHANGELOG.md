@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `dart analyze`, `flutter analyze`, `detekt`, `terraform validate` and `terraform fmt -check` now count as lint runs (#33, thanks @shizwan). Plain `terraform fmt` rewrites files, so it doesn't. Same for `dart format`, which counts only with `--set-exit-if-changed`.
+- CI tests Python 3.9 on ubuntu-24.04, since ubuntu-latest no longer ships it.
+
 ## 0.5.2 (2026-10-23)
 
 - Config typos no longer switch the check off. A bare string in `ignore_paths` or `extra_commands` was read one character per regex (so `"generated"` ignored almost every edit), and a regex that didn't compile crashed the hook, which then allowed every stop. Now a string is one pattern and a bad regex is skipped (printed with `SHOW_RECEIPTS_DEBUG=1`). A non-number `max_blocks` falls back to 1.

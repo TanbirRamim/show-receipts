@@ -440,6 +440,8 @@ class CommandTests(unittest.TestCase):
             "terraform validate -json",
             "terraform fmt -check",
             "terraform fmt -recursive -check",
+            "terraform -chdir=infra validate",
+            "dart format --set-exit-if-changed .",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.cats(cmd), {"lint"})
@@ -467,6 +469,7 @@ class CommandTests(unittest.TestCase):
             "terraform destroy",
             "terraform fmt",
             "terraform fmt -recursive",
+            "dart format .",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertNotIn("lint", self.cats(cmd))
