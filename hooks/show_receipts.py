@@ -444,7 +444,8 @@ def _segment_categories(toks: list[str]) -> set:
                 cats.add("tests")
             if _BUILD_WORD.match(a) or (a in ("check",) and head == "cargo"):
                 cats.add("build")
-            if _LINT_WORD.match(a) or a in _LINT_TOOLS:
+            # "dart format" rewrites files; its check mode is handled below.
+            if (_LINT_WORD.match(a) or a in _LINT_TOOLS) and not (head in ("dart", "flutter") and a == "format"):
                 cats.add("lint")
             if _ALL_WORDS.match(a) and not (head in ("cargo", "deno") and a == "check"):
                 cats.update(CATEGORIES)
