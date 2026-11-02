@@ -432,6 +432,16 @@ class CommandTests(unittest.TestCase):
             "buf lint proto/",
             "tflint",
             "swiftformat --lint .",
+            "dart analyze",
+            "flutter analyze",
+            "detekt",
+            "detekt --input src/main/kotlin",
+            "terraform validate",
+            "terraform validate -json",
+            "terraform fmt -check",
+            "terraform fmt -recursive -check",
+            "terraform -chdir=infra validate",
+            "dart format --set-exit-if-changed .",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.cats(cmd), {"lint"})
@@ -444,6 +454,25 @@ class CommandTests(unittest.TestCase):
                 self.assertNotIn("lint", self.cats(cmd))
         # swiftformat without --lint rewrites files, it does not check them.
         self.assertNotIn("lint", self.cats("swiftformat ."))
+
+    def test_non_lint_dart_flutter_and_terraform_commands(self):
+        # Build, installation, mutation and infrastructure changes do not
+        # demonstrate that an analyzer or read-only format check ran.
+        for cmd in [
+            "dart pub get",
+            "dart compile exe bin/main.dart",
+            "flutter pub get",
+            "flutter build apk",
+            "flutter test",
+            "terraform plan",
+            "terraform apply",
+            "terraform destroy",
+            "terraform fmt",
+            "terraform fmt -recursive",
+            "dart format .",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertNotIn("lint", self.cats(cmd))
 
     def test_a_ci_script_proves_everything(self):
         self.assertEqual(self.cats("npm run ci"), {"tests", "build", "lint"})

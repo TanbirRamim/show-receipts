@@ -333,6 +333,7 @@ _LINT_TOOLS = {
     "hlint",
     "luacheck",
     "tflint",
+    "detekt",
 }
 # Tools whose lint check is a subcommand: the other subcommands rewrite or build,
 # so only "<tool> lint" may prove a lint claim.
@@ -415,6 +416,16 @@ def _segment_categories(toks: list[str]) -> set:
         cats.add("lint")
     if head in _LINT_SUBCOMMAND_TOOLS and args[:1] == ["lint"]:
         cats.add("lint")
+    # Language analyzers only count when the actual static analysis runs.
+    if head in ("dart", "flutter") and args[:1] == ["analyze"]:
+        cats.add("lint")
+    # Terraform plan/apply and the default fmt command aren't lint receipts.
+    # 'fmt' only checks formatting when -check is explicitly supplied.
+    if head == "terraform" and (args[:1] == ["validate"] or (args[:1] == ["fmt"] and "-check" in flags)):
+        cats.add("lint")
+    # Same for dart format: it only checks when told to fail on changes.
+    if head == "dart" and args[:1] == ["format"] and "--set-exit-if-changed" in flags:
+        cats.add("lint")
     flag = _LINT_FLAG_TOOLS.get(head)
     if flag and flag in flags:
         cats.add("lint")
@@ -433,7 +444,8 @@ def _segment_categories(toks: list[str]) -> set:
                 cats.add("tests")
             if _BUILD_WORD.match(a) or (a in ("check",) and head == "cargo"):
                 cats.add("build")
-            if _LINT_WORD.match(a) or a in _LINT_TOOLS:
+            # "dart format" rewrites files; its check mode is handled below.
+            if (_LINT_WORD.match(a) or a in _LINT_TOOLS) and not (head in ("dart", "flutter") and a == "format"):
                 cats.add("lint")
             if _ALL_WORDS.match(a) and not (head in ("cargo", "deno") and a == "check"):
                 cats.update(CATEGORIES)
