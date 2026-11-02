@@ -333,6 +333,7 @@ _LINT_TOOLS = {
     "hlint",
     "luacheck",
     "tflint",
+    "detekt",
 }
 # Tools whose lint check is a subcommand: the other subcommands rewrite or build,
 # so only "<tool> lint" may prove a lint claim.
@@ -414,6 +415,13 @@ def _segment_categories(toks: list[str]) -> set:
     if head in _LINT_TOOLS and (head != "tsc" or "--noEmit" in flags):
         cats.add("lint")
     if head in _LINT_SUBCOMMAND_TOOLS and args[:1] == ["lint"]:
+        cats.add("lint")
+    # Language analyzers only count when the actual static analysis runs.
+    if head in ("dart", "flutter") and args[:1] == ["analyze"]:
+        cats.add("lint")
+    # Terraform plan/apply and the default fmt command aren't lint receipts.
+    # 'fmt' only checks formatting when -check is explicitly supplied.
+    if head == "terraform" and (args[:1] == ["validate"] or (args[:1] == ["fmt"] and "-check" in flags)):
         cats.add("lint")
     flag = _LINT_FLAG_TOOLS.get(head)
     if flag and flag in flags:
