@@ -381,6 +381,15 @@ def _segment_categories(toks: list[str]) -> set:
     if not toks:
         return cats
     head = os.path.basename(toks[0]).lower()
+    # Help/version requests and test discovery can exit successfully without
+    # running a check. Respect -- so a test argument named --help still runs.
+    options = toks[1 : toks.index("--")] if "--" in toks else toks[1:]
+    if {"--help", "--version"}.intersection(options):
+        return cats
+    if head == "pytest" and {"--collect-only", "--co"}.intersection(options):
+        return cats
+    if head == "jest" and "--listTests" in options:
+        return cats
     args = [t for t in toks[1:] if not t.startswith("-")]
     flags = [t for t in toks[1:] if t.startswith("-")]
 

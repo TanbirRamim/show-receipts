@@ -349,6 +349,28 @@ class CommandTests(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertNotIn("tests", self.cats(cmd))
 
+    def test_information_and_discovery_are_not_check_receipts(self):
+        for cmd in [
+            "pytest --version",
+            "pytest --help",
+            "python -m pytest --collect-only",
+            "uv run pytest --co",
+            "npx jest --listTests",
+            "gcc --version",
+            "ruff check --help",
+            "python -m build --help",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.cats(cmd), set())
+
+    def test_information_command_does_not_hide_a_real_check(self):
+        self.assertIn("tests", self.cats("pytest --version && pytest -q"))
+        self.assertIn("tests", self.cats("npm run test -- --help"))
+
+    def test_discovery_cannot_prove_tests_passed(self):
+        rows = [user("fix it"), *edit(), *bash("pytest --collect-only"), say("All tests pass.")]
+        self.assertTrue(verdict(rows).block)
+
     def test_more_runners(self):
         tests = [
             "bun test",
