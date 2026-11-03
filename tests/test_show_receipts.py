@@ -353,6 +353,9 @@ class CommandTests(unittest.TestCase):
         for cmd in [
             "pytest --version",
             "pytest --help",
+            "pytest -h",
+            "pytest -V",
+            "cargo test -h",
             "python -m pytest --collect-only",
             "uv run pytest --co",
             "npx jest --listTests",
@@ -366,6 +369,8 @@ class CommandTests(unittest.TestCase):
     def test_information_command_does_not_hide_a_real_check(self):
         self.assertIn("tests", self.cats("pytest --version && pytest -q"))
         self.assertIn("tests", self.cats("npm run test -- --help"))
+        # Lowercase -v is verbose, not version.
+        self.assertIn("tests", self.cats("pytest -v"))
 
     def test_discovery_cannot_prove_tests_passed(self):
         rows = [user("fix it"), *edit(), *bash("pytest --collect-only"), say("All tests pass.")]
