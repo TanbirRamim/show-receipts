@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-- `clang-tidy`, `stylua --check`, and `scalafmt --test` / `--list` now count as lint runs. Plain StyLua and Scalafmt commands still do not, since they rewrite files (#38).
-
+- `clang-tidy`, `stylua --check`, and `scalafmt --test` / `--list` now count as lint runs. Plain StyLua and Scalafmt commands still do not, since they rewrite files (#38, thanks @Sarbajit-Sengupta).
 - `dart analyze`, `flutter analyze`, `detekt`, `terraform validate` and `terraform fmt -check` now count as lint runs (#33, thanks @shizwan). Plain `terraform fmt` rewrites files, so it doesn't. Same for `dart format`, which counts only with `--set-exit-if-changed`.
 - CI tests Python 3.9 on ubuntu-24.04, since ubuntu-latest no longer ships it.
 
