@@ -334,12 +334,17 @@ _LINT_TOOLS = {
     "luacheck",
     "tflint",
     "detekt",
+    "clang-tidy",
 }
 # Tools whose lint check is a subcommand: the other subcommands rewrite or build,
 # so only "<tool> lint" may prove a lint claim.
 _LINT_SUBCOMMAND_TOOLS = {"sqlfluff", "buf"}
 # Tools that check only with a flag: without it they rewrite files in place.
-_LINT_FLAG_TOOLS = {"swiftformat": "--lint"}
+_LINT_FLAG_TOOLS = {
+    "swiftformat": {"--lint"},
+    "stylua": {"--check"},
+    "scalafmt": {"--test", "--list"},
+}
 _ALL_WORDS = re.compile(r"^(?:ci|check|checks|verify|validate|all|precommit|pre-commit)(?::.*)?$", re.I)
 _TEST_WORD = re.compile(r"(?:^|[/_.:-])(?:tests?|specs?|e2e)(?:$|[/_.:-])", re.I)
 _BUILD_WORD = re.compile(r"^(?:build|compile|package|assemble|dist)(?::.*)?$", re.I)
@@ -426,8 +431,8 @@ def _segment_categories(toks: list[str]) -> set:
     # Same for dart format: it only checks when told to fail on changes.
     if head == "dart" and args[:1] == ["format"] and "--set-exit-if-changed" in flags:
         cats.add("lint")
-    flag = _LINT_FLAG_TOOLS.get(head)
-    if flag and flag in flags:
+    lint_flags = _LINT_FLAG_TOOLS.get(head)
+    if lint_flags and lint_flags.intersection(flags):
         cats.add("lint")
 
     if head in _RUNNERS or head.endswith("gradlew") or head.endswith("mvnw"):

@@ -432,6 +432,10 @@ class CommandTests(unittest.TestCase):
             "buf lint proto/",
             "tflint",
             "swiftformat --lint .",
+            "clang-tidy src/main.cpp",
+            "stylua --check .",
+            "scalafmt --test",
+            "scalafmt --list",
             "dart analyze",
             "flutter analyze",
             "detekt",
@@ -454,6 +458,8 @@ class CommandTests(unittest.TestCase):
                 self.assertNotIn("lint", self.cats(cmd))
         # swiftformat without --lint rewrites files, it does not check them.
         self.assertNotIn("lint", self.cats("swiftformat ."))
+        self.assertNotIn("lint", self.cats("stylua ."))
+        self.assertNotIn("lint", self.cats("scalafmt"))
 
     def test_non_lint_dart_flutter_and_terraform_commands(self):
         # Build, installation, mutation and infrastructure changes do not
