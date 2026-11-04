@@ -349,13 +349,54 @@ _ALL_WORDS = re.compile(r"^(?:ci|check|checks|verify|validate|all|precommit|pre-
 _TEST_WORD = re.compile(r"(?:^|[/_.:-])(?:tests?|specs?|e2e)(?:$|[/_.:-])", re.I)
 _BUILD_WORD = re.compile(r"^(?:build|compile|package|assemble|dist)(?::.*)?$", re.I)
 _LINT_WORD = re.compile(r"^(?:lint|typecheck|type-check|types|tsc|clippy|vet|fmt|format|style)(?::.*)?$", re.I)
-_SPLIT_RE = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _shell_segments(command: str) -> list[str]:
+    """Separate shell commands while preserving quoted and escaped data."""
+    segments: list[str] = []
+    current: list[str] = []
+    quote = ""
+    escaped = False
+    comment = False
+    i = 0
+    while i < len(command):
+        char = command[i]
+        if comment:
+            if char == "\n":
+                segments.append("".join(current))
+                current = []
+                comment = False
+        elif escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\" and quote != "'":
+            current.append(char)
+            escaped = True
+        elif quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+        elif char in ("'", '"'):
+            current.append(char)
+            quote = char
+        elif char == "#" and (not current or current[-1].isspace() or current[-1] in "({"):
+            comment = True
+        elif char in (";", "|", "\n") or command[i : i + 2] == "&&":
+            segments.append("".join(current))
+            current = []
+            if command[i : i + 2] == "&&":
+                i += 1
+        else:
+            current.append(char)
+        i += 1
+    segments.append("".join(current))
+    return segments
 
 
 def _tokens(segment: str) -> list[str]:
     try:
-        toks = shlex.split(segment, comments=True)
+        toks = shlex.split(segment)
     except ValueError:
         toks = segment.split()
     out: list[str] = []
@@ -374,6 +415,30 @@ def _tokens(segment: str) -> list[str]:
         out.append(t)
         i += 1
     return out
+
+
+def _shell_body(toks: list[str]) -> str | None:
+    if not toks:
+        return None
+    head = os.path.basename(toks[0]).lower()
+    if head in ("bash", "sh", "zsh"):
+        for index, arg in enumerate(toks[1:], 1):
+            if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", arg) and index + 1 < len(toks):
+                return toks[index + 1]
+    if head == "eval":
+        return " ".join(toks[1:])
+    return None
+
+
+def _executable_segments(command: str) -> list[str]:
+    segments: list[str] = []
+    for segment in _shell_segments(command):
+        body = _shell_body(_tokens(segment))
+        if body is not None:
+            segments.extend(_executable_segments(body))
+        elif segment.strip():
+            segments.append(segment)
+    return segments
 
 
 def _segment_categories(toks: list[str]) -> set:
@@ -488,7 +553,7 @@ def _segment_categories(toks: list[str]) -> set:
 def command_categories(command: str, extra: dict[str, list[str]] | None = None) -> set:
     """Which claim categories a shell command can prove."""
     cats: set = set()
-    for seg in _SPLIT_RE.split(command or ""):
+    for seg in _executable_segments(command or ""):
         seg = seg.strip().lstrip("(").strip()
         if not seg:
             continue
@@ -819,7 +884,7 @@ def _bash_edits(tr: Transcript, ev: Event, res: dict) -> None:
     files = diff.get("files") if isinstance(diff, dict) else None
     if not files:
         return
-    heads = {os.path.basename((_tokens(seg) or [""])[0]) for seg in _SPLIT_RE.split(ev.command)}
+    heads = {os.path.basename((_tokens(seg) or [""])[0]) for seg in _executable_segments(ev.command)}
     if res.get("gitOperation") or heads & {"git", "gh"}:
         return  # checkouts, merges and pulls change files, but that isn't new code to test
     edits = [Event("edit", path=str(f.get("filePath", "")), tool="Bash") for f in files if isinstance(f, dict)]
@@ -977,7 +1042,7 @@ def _effective_ok(ev: Event, cmd_cats: list[str]) -> bool | None:
     fail_out = "tests" in cmd_cats and _TEST_FAIL_OUTPUT.search(ev.output or "")
     if ev.ok and fail_out:
         return False
-    if not ev.ok and not fail_out and len([x for x in _SPLIT_RE.split(ev.command) if x.strip()]) > 1:
+    if not ev.ok and not fail_out and len(_executable_segments(ev.command)) > 1:
         return None
     return ev.ok
 
