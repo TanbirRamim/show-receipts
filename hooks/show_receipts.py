@@ -351,6 +351,71 @@ _BUILD_WORD = re.compile(r"^(?:build|compile|package|assemble|dist)(?::.*)?$", r
 _LINT_WORD = re.compile(r"^(?:lint|typecheck|type-check|types|tsc|clippy|vet|fmt|format|style)(?::.*)?$", re.I)
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
+_UV_VALUE_OPTIONS = {
+    "--project",
+    "--directory",
+    "--python",
+    "-p",
+    "--package",
+    "--with",
+    "-w",
+    "--with-editable",
+    "--with-requirements",
+    "--extra",
+    "--group",
+    "--env-file",
+    "--config-file",
+    "--cache-dir",
+    "--color",
+}
+_UV_SWITCH_OPTIONS = {
+    "--frozen",
+    "--locked",
+    "--no-sync",
+    "--no-project",
+    "--offline",
+    "--no-config",
+    "--active",
+    "--isolated",
+    "--no-dev",
+    "--all-extras",
+    "--all-groups",
+    "--no-default-groups",
+    "--no-cache",
+    "--no-cache-dir",
+    "--no-python-downloads",
+    "--managed-python",
+    "--no-managed-python",
+    "--quiet",
+    "-q",
+    "--verbose",
+    "-v",
+    "--module",
+    "-m",
+}
+
+
+def _uv_run_command(toks: list[str], start: int) -> int | None:
+    """Locate the executable after known uv options, without treating values as checks."""
+    i = start + 1
+    running = False
+    while i < len(toks):
+        arg = toks[i]
+        if not running and arg == "run":
+            running = True
+            i += 1
+        elif arg == "--":
+            return i + 1 if running and i + 1 < len(toks) else None
+        elif not arg.startswith("-"):
+            return i if running else None
+        elif arg.partition("=")[0] in _UV_VALUE_OPTIONS:
+            i += 1 if "=" in arg else 2
+        elif arg in _UV_SWITCH_OPTIONS or re.fullmatch(r"-[qv]+", arg) or (len(arg) > 2 and arg[:2] in ("-p", "-w")):
+            i += 1
+        else:
+            return None
+    return None
+
 
 def _shell_segments(command: str) -> list[str]:
     """Separate shell commands while preserving quoted and escaped data."""
@@ -409,6 +474,11 @@ def _tokens(segment: str) -> list[str]:
         if not out and t == "timeout" and i + 1 < len(toks):
             i += 2
             continue
+        if not out and t == "uv":
+            command = _uv_run_command(toks, i)
+            if command is not None:
+                i = command
+                continue
         if not out and t in _RUN_WRAPPERS and i + 1 < len(toks) and toks[i + 1] in ("run", "exec"):
             i += 2
             continue

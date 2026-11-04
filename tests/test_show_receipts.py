@@ -349,6 +349,35 @@ class CommandTests(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertNotIn("tests", self.cats(cmd))
 
+    def test_uv_run_options_before_and_after_subcommand(self):
+        for cmd in [
+            "uv run --project app pytest -q",
+            "uv --directory app run pytest",
+            "uv --project app run --frozen --python 3.13 python -m pytest",
+            "uv run --project=app --locked -- pytest",
+            "uv run --with pytest pytest",
+            "uv run -wpytest -p3.13 pytest",
+            "uv run --group tests --env-file dev.env python -m unittest discover",
+            "uv run --no-project --offline -m pytest",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertIn("tests", self.cats(cmd))
+
+    def test_uv_option_values_are_not_commands(self):
+        for cmd in [
+            "uv run --project pytest echo done",
+            "uv run --with pytest python -c 'print(1)'",
+            "uv run --env-file tests echo done",
+            "uv pip install pytest",
+            "uv run --unknown-option pytest",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.cats(cmd), set())
+
+    def test_uv_options_do_not_hide_real_check_receipt(self):
+        rows = [user("fix it"), edit(), bash("uv run --project app pytest -q"), say("All tests pass.")]
+        self.assertFalse(verdict(rows).block)
+
     def test_information_and_discovery_are_not_check_receipts(self):
         for cmd in [
             "pytest --version",
