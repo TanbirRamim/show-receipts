@@ -376,6 +376,43 @@ class CommandTests(unittest.TestCase):
         rows = [user("fix it"), *edit(), *bash("pytest --collect-only"), say("All tests pass.")]
         self.assertTrue(verdict(rows).block)
 
+    def test_quoted_or_commented_examples_are_not_receipts(self):
+        for cmd in [
+            "echo 'example; pytest; ending'",
+            'echo "example | gcc | ending"',
+            "echo 'example && ruff check . && ending'",
+            r"echo example\;pytest\;ending",
+            "echo done # example; pytest; ignored",
+            "echo 'example\npytest\nending'",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.cats(cmd), set())
+
+    def test_real_shell_commands_still_prove_checks(self):
+        for cmd in [
+            "echo 'example; ignored' && pytest -q",
+            "bash -c 'echo start; pytest; echo end'",
+            "sh -lc 'echo start && pytest && echo end'",
+            "eval 'echo start; pytest; echo end'",
+            "echo ignored # comment; ignored\npytest -q",
+            "pytest # this is still a test run",
+        ]:
+            with self.subTest(cmd=cmd):
+                self.assertIn("tests", self.cats(cmd))
+
+    def test_quoted_example_cannot_prove_tests_passed(self):
+        rows = [user("fix it"), edit(), bash("echo 'example; pytest; ending'"), say("All tests pass.")]
+        self.assertTrue(verdict(rows).block)
+
+    def test_shell_string_retains_ambiguous_compound_exit_status(self):
+        rows = [
+            user("fix it"),
+            edit(),
+            bash("bash -c 'echo start; pytest; false'", ok=False, out="3 passed"),
+            say("All tests pass."),
+        ]
+        self.assertFalse(verdict(rows).block)
+
     def test_more_runners(self):
         tests = [
             "bun test",
